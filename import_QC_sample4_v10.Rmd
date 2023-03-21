@@ -1,0 +1,719 @@
+---
+title: "import QC sample4 v10"
+author: "T Attenborough"
+date: "24/11/2022"
+output: html_document
+---
+
+```{r}
+library(Seurat) #Seurat v4.0.2
+library(dplyr)
+library(patchwork)
+library(here)
+library(ggplot2)
+library(clustree)
+library(ggrepel)
+library(tidyseurat)
+library(RColorBrewer)
+library(SingleCellExperiment)
+library(scater)
+library(DoubletFinder)
+```
+
+First I am going to look at sample 4 from MIRACIDIA run 1
+
+```{r}
+run1.sample4.sorted.filt <- readRDS(file = "/Users/ta13/R_tutorials/neat_miracidia/run1.sample4.sorted.filt.rds")
+
+```
+
+
+Import all run1 sample4 (sorted)
+```{r}
+run1.sample4.mira.data <- Read10X(here(c('/Users/ta13/Miracidia/v10_cellranger_outs/Sample4/filtered_feature_bc_matrix/')))
+```
+Initially there are 4,465 cells.
+
+Import into a Seurat object, removing any genes which don't appear in at least 3 cells, and any cells which express less than 200 genes.
+```{r}
+run1.sample4.sorted <- CreateSeuratObject(counts = run1.sample4.mira.data, project = "run1.sample4.sorted", min.cells = 3, min.features = 200)
+```
+Now 4,464 cells and 8,751 genes.
+
+Once you have created the Seurat object, the count matrices and individual count matrices and objects are not needed anymore. It is a good idea to remove them and run garbage collect to free up some memory.
+```{r}
+# remove all objects that will not be used.
+rm(run1.sample4.mira.data)
+
+# run garbage collect to free up memory
+gc()
+```
+
+
+Add metadata to the Seurat object
+```{r}
+#add metadata
+run1.sample4.sorted@meta.data$plex =  "sample4"
+
+table(run1.sample4.sorted$plex)
+
+#add metadata
+run1.sample4.sorted@meta.data$type =  "sorted"
+
+table(run1.sample4.sorted$type)
+
+#add metadata
+run1.sample4.sorted@meta.data$stage =  "miracidia"
+
+table(run1.sample4.sorted$stage)
+```
+
+Plot raw QC
+```{r}
+run1.sample4.sorted[["percent.mt"]] <- PercentageFeatureSet(run1.sample4.sorted, pattern = "Smp-9")
+VlnPlot(run1.sample4.sorted, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
+Look at how number or UMIs and number of genes intersect, also with mitochondrial percentage. Also calculate the log10 genes per UMI, and make a metadata object.
+```{r}
+FeatureScatter(object = run1.sample4.sorted, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")+
+  	ggtitle("Genes and UMIs in each cell")
+
+run1.sample4.sorted$log10GenesPerUMI <- log10(run1.sample4.sorted$nFeature_RNA) / log10(run1.sample4.sorted$nCount_RNA)
+run1.sample4.sorted_metadata <- run1.sample4.sorted@meta.data
+run1.sample4.sorted_metadata$cells <- rownames(run1.sample4.sorted_metadata)
+run1.sample4.sorted@meta.data <- run1.sample4.sorted_metadata
+
+FeatureScatter(run1.sample4.sorted, "nCount_RNA", "percent.mt", group.by = "orig.ident", pt.size = 0.5)
+
+FeatureScatter(run1.sample4.sorted, "nFeature_RNA", "percent.mt", group.by = "orig.ident", pt.size = 0.5)
+
+```
+
+For high quality data, the proportional histogram should contain a single large peak that represents cells that were encapsulated. If we see a small shoulder to the right of the major peak (not present in our data), or a bimodal distribution of the cells, that can indicate a couple of things. It might be that there are a set of cells that failed for some reason. It could also be that there are biologically different types of cells (i.e. quiescent cell populations, less complex cells of interest), and/or one type is much smaller than the other (i.e. cells with high counts may be cells that are larger in size). Therefore, this threshold should be assessed with other metrics. (From HBCTraining page)
+
+```{r}
+# Visualize the number of cell counts per sample
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(x=plex, fill=plex)) + 
+  	geom_bar() +
+  	theme_classic() +
+  	theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  	theme(plot.title = element_text(hjust=0.5, face="bold")) +
+  	ggtitle("Number of Cells")
+
+# Visualize the number UMIs/transcripts per cell. We want to have at least 500 UMIs/cell if possible. Black lines at 500 and 100 UMIs
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(color=plex, x=nCount_RNA, fill= plex)) + 
+  	geom_density(alpha = 0.2) + 
+  	scale_x_log10() + 
+  	theme_classic() +
+  	ylab("Cell density") +
+    geom_vline(xintercept = 100) +
+  	geom_vline(xintercept = 500) +
+  	geom_vline(xintercept = 1000)+
+  	ggtitle("UMIs per cell")
+```
+
+```{r}
+# Visualize the distribution of genes detected per cell via histogram
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(color=plex, x=nFeature_RNA, fill= plex)) + 
+  	geom_density(alpha = 0.2) + 
+  	theme_classic() +
+  	scale_x_log10() + 
+  	geom_vline(xintercept = 300)+
+  	ggtitle("Genes per cell")
+
+
+# Visualize the distribution of genes detected per cell via boxplot
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(x=plex, y=log10(nFeature_RNA), fill=plex)) + 
+  	geom_boxplot() + 
+  	theme_classic() +
+  	theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  	theme(plot.title = element_text(hjust=0.5, face="bold")) +
+  	ggtitle("Log10 of gene count per cell")
+
+```
+```{r}
+# Visualize the correlation between genes detected and number of UMIs and determine whether strong presence of cells with low numbers of genes/UMIs
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(x=nCount_RNA, y=nFeature_RNA, color=percent.mt)) + 
+  	geom_point() + 
+	scale_colour_gradient(low = "gray90", high = "black") +
+  	stat_smooth(method=lm) +
+  	scale_x_log10() + 
+  	scale_y_log10() + 
+  	theme_classic() +
+  	geom_vline(xintercept = 1000) +
+  	geom_hline(yintercept = 500) +
+  	ggtitle("UMI v gene count per cell, coloured by mito%")
+
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(x=nCount_RNA, y=nFeature_RNA, color=percent.mt)) + 
+  	geom_point() + 
+	scale_colour_gradient(low = "gray90", high = "black") +
+  	stat_smooth(method=lm) +
+  	scale_x_log10() + 
+  	scale_y_log10() + 
+  	theme_classic() +
+  	geom_vline(xintercept = 1000) +
+  	geom_hline(yintercept = 500) +
+  	facet_wrap(~plex)
+
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(x=percent.mt, y=nFeature_RNA, color=nCount_RNA)) + 
+  	geom_point() + 
+	scale_colour_gradient(low = "gray90", high = "black") +
+  	stat_smooth(method=lm) +
+  	scale_x_log10() + 
+  	scale_y_log10() + 
+  	theme_classic() +
+  	geom_vline(xintercept = 1000) +
+  	geom_hline(yintercept = 500) +
+  	ggtitle("Mito v gene count per cell, coloured by readcount")
+```
+
+```{r}
+# Visualize the distribution of mitochondrial gene expression detected per cell
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(color=plex, x=percent.mt, fill=plex)) + 
+  	geom_density(alpha = 0.2) + 
+  	scale_x_log10() + 
+  	theme_classic() +
+  	geom_vline(xintercept = 5)+
+  	ggtitle("Cell density by mito%")
+
+```
+
+Look at cell complexity: in samples where each cell is sequenced less, it will have a higher complexity as the sequencing has not started to become saturated. For cells with complexity, this may be enough to approach saturation. Therefore these cells may be detected through low novelty scores. In an example, most cells had a novelty score above 0.8. From HBCTraining.
+```{r}
+# Visualize the overall complexity of the gene expression by visualizing the genes detected per UMI
+run1.sample4.sorted_metadata %>%
+  	ggplot(aes(x=log10GenesPerUMI, color = plex, fill=plex)) +
+  	geom_density(alpha = 0.2) +
+  	theme_classic() +
+  	geom_vline(xintercept = 0.8)
+```
+
+Filter out cells with more than 5% mitochondrial gene expression and less than 500 UMIs, 
+
+Should I also consider:
+Lowering/changing the mito %? 
+putting a ceiling on number of genes/UMIs?
+and complexity less than 0.8?
+
+Min features is 300, set earlier when importing the seurat object
+```{r}
+run1.sample4.sorted <- subset(run1.sample4.sorted, subset = percent.mt < 5)
+
+dim(run1.sample4.sorted) #shows number of genes and number of cells
+
+run1.sample4.sorted <- subset(run1.sample4.sorted, subset = nCount_RNA > 500)
+
+dim(run1.sample4.sorted) #shows number of genes and number of cells
+
+#run1.sample4.sorted <- subset(run1.sample4.sorted, subset = log10GenesPerUMI > 0.80)
+#dim(run1.sample4.sorted) #shows number of genes and number of cells
+
+```
+
+Plot filtered QC
+Lets plot the same QC-stats another time. Actually, let's re-plot some more of them too!!
+```{r}
+feats <- c("nFeature_RNA", "nCount_RNA", "percent.mt")
+run1.sample4.sorted$log10GenesPerUMI <- log10(run1.sample4.sorted$nFeature_RNA) / log10(run1.sample4.sorted$nCount_RNA)
+run1.sample4.sorted_metadata <- run1.sample4.sorted@meta.data
+run1.sample4.sorted_metadata$cells <- rownames(run1.sample4.sorted_metadata)
+run1.sample4.sorted@meta.data <- run1.sample4.sorted_metadata
+
+VlnPlot(run1.sample4.sorted, group.by = "orig.ident", features = feats, pt.size = 0.1, ncol = 3) + 
+    NoLegend()
+
+FeatureScatter(object = run1.sample4.sorted, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")+
+  	ggtitle("Genes and UMIs in each cell")
+
+FeatureScatter(run1.sample4.sorted, "nCount_RNA", "percent.mt", group.by = "orig.ident", pt.size = 0.5)
+
+FeatureScatter(run1.sample4.sorted, "nFeature_RNA", "percent.mt", group.by = "orig.ident", pt.size = 0.5)
+
+# Visualize the number of cell counts per sample
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(x=plex, fill=plex)) + 
+  	geom_bar() +
+  	theme_classic() +
+  	theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  	theme(plot.title = element_text(hjust=0.5, face="bold")) +
+  	ggtitle("Number of Cells")
+
+# Visualize the number UMIs/transcripts per cell. We want to have at least 500 UMIs/cell if possible. Black lines at 500 and 100 UMIs
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(color=plex, x=nCount_RNA, fill= plex)) + 
+  	geom_density(alpha = 0.2) + 
+  	scale_x_log10() + 
+  	theme_classic() +
+  	ylab("Cell density") +
+  	geom_vline(xintercept = 500) +
+  	geom_vline(xintercept = 1000)+
+  	ggtitle("UMIs per cell")
+
+# Visualize the distribution of genes detected per cell via histogram
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(color=plex, x=nFeature_RNA, fill= plex)) + 
+  	geom_density(alpha = 0.2) + 
+  	theme_classic() +
+  	scale_x_log10() + 
+  	geom_vline(xintercept = 300)+
+  	ggtitle("Genes per cell")
+
+# Visualize the distribution of genes detected per cell via boxplot
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(x=plex, y=log10(nFeature_RNA), fill=plex)) + 
+  	geom_boxplot() + 
+  	theme_classic() +
+  	theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  	theme(plot.title = element_text(hjust=0.5, face="bold")) +
+  	ggtitle("Log10 of gene count per cell")
+
+# Visualize the correlation between genes detected and number of UMIs and determine whether strong presence of cells with low numbers of genes/UMIs
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(x=nCount_RNA, y=nFeature_RNA, color=percent.mt)) + 
+  	geom_point() + 
+	scale_colour_gradient(low = "gray90", high = "black") +
+  	stat_smooth(method=lm) +
+  	scale_x_log10() + 
+  	scale_y_log10() + 
+  	theme_classic() +
+  	geom_vline(xintercept = 1000) +
+  	geom_hline(yintercept = 500) +
+  	ggtitle("UMI v gene count per cell, coloured by mito%")
+
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(x=nCount_RNA, y=nFeature_RNA, color=percent.mt)) + 
+  	geom_point() + 
+	scale_colour_gradient(low = "gray90", high = "black") +
+  	stat_smooth(method=lm) +
+  	scale_x_log10() + 
+  	scale_y_log10() + 
+  	theme_classic() +
+  	geom_vline(xintercept = 1000) +
+  	geom_hline(yintercept = 500) +
+  	facet_wrap(~plex)
+
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(x=percent.mt, y=nFeature_RNA, color=nCount_RNA)) + 
+  	geom_point() + 
+	scale_colour_gradient(low = "gray90", high = "black") +
+  	stat_smooth(method=lm) +
+  	scale_x_log10() + 
+  	scale_y_log10() + 
+  	theme_classic() +
+  	geom_vline(xintercept = 1000) +
+  	geom_hline(yintercept = 500) +
+  	ggtitle("UMI v gene count per cell, coloured by readcount")
+
+# Visualize the distribution of mitochondrial gene expression detected per cell
+run1.sample4.sorted_metadata %>% 
+  	ggplot(aes(color=plex, x=percent.mt, fill=plex)) + 
+  	geom_density(alpha = 0.2) + 
+  	scale_x_log10() + 
+  	theme_classic() +
+  	geom_vline(xintercept = 5)+
+  	ggtitle("Cell density by mito%")
+
+# Visualize the overall complexity of the gene expression by visualizing the genes detected per UMI
+run1.sample4.sorted_metadata %>%
+  	ggplot(aes(x=log10GenesPerUMI, color = plex, fill=plex)) +
+  	geom_density(alpha = 0.2) +
+  	theme_classic() +
+  	geom_vline(xintercept = 0.8)
+```
+
+
+Then, let's save the new metadata file
+```{r}
+ # Save filtered subset to new metadata
+run1.sample4.sorted.metadata_initialFilt <- run1.sample4.sorted@meta.data
+```
+
+Predict doublets
+Have to do initial normalisation and clustering before doublets can be addressed
+```{r}
+run1.sample4.sorted <- NormalizeData(run1.sample4.sorted)
+run1.sample4.sorted <- FindVariableFeatures(run1.sample4.sorted, selection.method = "vst", nfeatures = 2000)
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(run1.sample4.sorted), 10)
+top10
+
+all.genes <- rownames(run1.sample4.sorted)
+run1.sample4.sorted <- ScaleData(run1.sample4.sorted, features = all.genes, vars.to.regress = c("percent.mt"))
+```
+
+```{r}
+#Check how many PCs to use for the data using Mathews Molecular cross validation
+source("/Users/ta13/R_tutorials/sporocysts/code.R")
+mcv = molecularCrossValidation(run1.sample4.sorted@assays$RNA@counts, varGenes = VariableFeatures(run1.sample4.sorted),normalisation = minimalSeuratV3)
+
+plotMCV(mcv)
+```
+Indicates 25 PCs min, two more than before
+
+Now, perform dimensionality reduction by PCA and UMAP embedding
+
+Here, we perform PCA on the scaled data. The most variable features selected earlier are used.
+```{r}
+run1.sample4.sorted <- RunPCA(run1.sample4.sorted, features = VariableFeatures(object = run1.sample4.sorted)) #shows top contributing features for the PCs
+VizDimLoadings(run1.sample4.sorted, dims = 1:2, reduction = "pca") #shows the weightings of top contributing features to pcs 1 and 2
+DimHeatmap(run1.sample4.sorted, dims = 1, cells = 500, balanced = TRUE) #plots heatmap of top 500 mist variable cells for PC1, with relative gene expression
+#DimHeatmap(run1.sample4.sorted, dims = 1:15, cells = 500, balanced = TRUE) #this gives the heatmaps for PCs 1-15, so you can visually inspect the genes/PCs
+
+```
+
+Use JackStraw to randomly permute data in 1% chunks. Here with 100 replicates and for 50 PCs
+```{r}
+run1.sample4.sorted <- JackStraw(run1.sample4.sorted, num.replicate = 100, dims =40) #do the permutation
+run1.sample4.sorted <- ScoreJackStraw(run1.sample4.sorted, dims = 1:40) #extract the scores
+JackStrawPlot(run1.sample4.sorted, dims = 1:40) #plot the p-vals for PCs. Dashed line giives null distribution
+ggsave("run1.sample4_jackstrawplot.pdf", width = 30, height = 15, units = c('cm'))
+
+ElbowPlot(run1.sample4.sorted, ndims = 50)  #ranks PCs by percentage of variation. A clear dropoff is sometimes seen, though not really here.
+ggsave("run1.sample4_elbowplot.pdf")
+
+```
+
+Next comes clustering and plotting of clusters.
+```{r}
+run1.sample4.sorted <- FindNeighbors(run1.sample4.sorted, dims = 1:36) #here construct k-nearst neighbours graoh based on euclidean distance in PCA space, then refine edge weights based on Jaccard similarity. this takes the number of PCs previously determined as importan (here 15 PCs_)
+run1.sample4.sorted <- FindClusters(run1.sample4.sorted, resolution = 0.5) #this iteratively groups cells using Louvain algorithm (default). Resolution sets the granularity. 0.4-1.2 gives good results for ~3K cells, with larger number suiting larger datasets.
+
+# Select a range of resolutions
+resolution.range <- seq(from = 0, to = 1, by = 0.1)
+
+# Find clusters using a range of resolutions
+run1.sample4.sorted <- Seurat::FindClusters(object = run1.sample4.sorted, resolution = resolution.range)
+
+clustree(run1.sample4.sorted)
+ggsave("run1.sample4.sortedclust_36PC_0_to_1_tree_RNA.pdf")
+```
+
+Based on the clustree results, I am going to choose an initial res of 0.7 with 40PCs
+
+```{r}
+run1.sample4.sorted <- FindClusters(run1.sample4.sorted, resolution = 0.7) #this iteratively groups cells using Louvain algorithm (default). Resolution sets the granularity. 0.4-1.2 gives good results for ~3K cells, with larger number suiting larger datasets.
+run1.sample4.sorted <- RunUMAP(run1.sample4.sorted, dims = 1:36) #runs umap to visualise the clusters. Need to set the number of PCs
+DimPlot(run1.sample4.sorted, reduction = "umap", label=T) #visulaises the UMAP
+ggsave("run1.sample4.sortedclust_36PC_0.7res_batchRegressed_after1filt.pdf")
+
+FeaturePlot(run1.sample4.sorted, features="nCount_RNA", label=TRUE)
+ggsave("run1.sample4.sortedclust_36PC_0.7res_UMIs.pdf")
+
+```
+
+
+Now, use DoubletFinder to find and remove doublets.
+
+PK identification: find the optimum neighbourhood size to calculate pANN
+```{r}
+sweep.res.list_run1.sample4.sorted <- paramSweep_v3(run1.sample4.sorted, PCs = 1:36, sct = FALSE)
+
+sweep.stats_run1.sample4.sorted <- summarizeSweep(sweep.res.list_run1.sample4.sorted, GT = FALSE)
+bcmvn_run1.sample4.sorted <- find.pK(sweep.stats_run1.sample4.sorted)
+
+#stats sweeps currently estimates that the optimum pK for these data is... 0.02 and pN = 0.05
+
+annotations <- run1.sample4.sorted@meta.data$RNA_snn_res.0.7
+nExp_poi <- round(0.08*nrow(run1.sample4.sorted@meta.data)) # assuming 10X loading to recover 10,000 cells
+homotypic.prop <- modelHomotypic(annotations)
+nExp_poi.adj <- round(nExp_poi*(1-homotypic.prop))
+
+pK=as.numeric(as.character(bcmvn_run1.sample4.sorted$pK))
+BCmetric=bcmvn_run1.sample4.sorted$BCmetric
+pK_choose = pK[which(BCmetric %in% max(BCmetric))]
+
+par(mar=c(5,4,4,8)+1,cex.main=1.2,font.main=2)
+plot(x = pK, y = BCmetric, pch = 16,type="b",
+col = "blue",lty=1)
+abline(v=pK_choose,lwd=2,col='red',lty=2)
+title("The BCmvn distributions")
+text(pK_choose,max(BCmetric),as.character(pK_choose),pos = 4,col = "red")
+
+## Run DoubletFinder  ----------------------------------------------------------------
+run1.sample4.sorted <- doubletFinder_v3(run1.sample4.sorted, PCs = 1:30, pN = 0.25, pK = 	0.3, nExp = nExp_poi.adj, reuse.pANN = FALSE, sct = FALSE)
+
+table(run1.sample4.sorted$DF.classifications_0.25_0.3_303) #shows number of genes and number of cells
+
+
+DimPlot(run1.sample4.sorted, reduction = "umap", group.by = "DF.classifications_0.25_0.3_303") #visulaises the UMAP
+ggsave("run1.sample4.sorted_doublets.pdf")
+
+
+
+```
+
+We should expect that two cells have more detected genes than a single cell, lets check if our predicted doublets also have more detected genes in general.
+```{r}
+VlnPlot(run1.sample4.sorted, features = "nFeature_RNA", group.by = 'DF.classifications_0.25_0.3_303', pt.size = 0.1)
+
+FeatureScatter(run1.sample4.sorted, "nFeature_RNA", "nCount_RNA", group.by = "DF.classifications_0.25_0.3_303", pt.size = 0.5)
+
+```
+
+Now, lets remove all predicted doublets from our data. I also so want to save the doublets, to see what's in them later, just in case.
+```{r}
+run1.sample4.sorted.filt = run1.sample4.sorted[, run1.sample4.sorted@meta.data[, 'DF.classifications_0.25_0.3_303'] == "Singlet"]
+run1.sample4.sorted.doublets = run1.sample4.sorted[, run1.sample4.sorted@meta.data[, 'DF.classifications_0.25_0.3_303'] == "Doublet"]
+
+dim(run1.sample4.sorted.filt)
+
+
+
+run1.sample4.sorted.metadata <- run1.sample4.sorted@meta.data
+
+ggplot(run1.sample4.sorted.metadata, aes(nFeature_RNA, pANN_0.25_0.3_303, color=DF.classifications_0.25_0.3_303)) + geom_point()
+ggsave("run1.sample4.sorted.df_scores_0.08.pdf")
+
+```
+
+Leaves 3852 cells and 8621 genes
+
+ Save the doublet-free data, and the doublets
+```{r}
+#saveRDS(run1.sample4.sorted.filt, file = "run1.sample4.sorted_afterDF.rds") #saves this version of the dataset
+saveRDS(run1.sample4.sorted.doublets, file = "run1.sample4.sorted_doublets.rds") #saves this version of the dataset
+
+```
+
+Now, rerun the visual QC.
+```{r}
+feats <- c("nFeature_RNA", "nCount_RNA", "percent.mt")
+run1.sample4.sorted.filt$log10GenesPerUMI <- log10(run1.sample4.sorted.filt$nFeature_RNA) / log10(run1.sample4.sorted.filt$nCount_RNA)
+run1.sample4.sorted.filt_metadata <- run1.sample4.sorted.filt@meta.data
+run1.sample4.sorted.filt_metadata$cells <- rownames(run1.sample4.sorted.filt_metadata)
+run1.sample4.sorted.filt@meta.data <- run1.sample4.sorted.filt_metadata
+
+VlnPlot(run1.sample4.sorted.filt, group.by = "orig.ident", features = feats, pt.size = 0.1, ncol = 3) + 
+  NoLegend()
+
+FeatureScatter(object = run1.sample4.sorted.filt, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")+
+  ggtitle("Genes and UMIs in each cell")
+
+FeatureScatter(run1.sample4.sorted.filt, "nCount_RNA", "percent.mt", group.by = "orig.ident", pt.size = 0.5)
+
+FeatureScatter(run1.sample4.sorted.filt, "nFeature_RNA", "percent.mt", group.by = "orig.ident", pt.size = 0.5)
+
+# Visualize the number of cell counts per sample
+run1.sample4.sorted.filt_metadata %>% 
+  ggplot(aes(x=plex, fill=plex)) + 
+  geom_bar() +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  theme(plot.title = element_text(hjust=0.5, face="bold")) +
+  ggtitle("Number of Cells")
+
+# Visualize the number UMIs/transcripts per cell. We want to have at least 500 UMIs/cell if possible. Black lines at 500 and 100 UMIs
+run1.sample4.sorted.filt_metadata %>% 
+  ggplot(aes(color=plex, x=nCount_RNA, fill= plex)) + 
+  geom_density(alpha = 0.2) + 
+  scale_x_log10() + 
+  theme_classic() +
+  ylab("Cell density") +
+  geom_vline(xintercept = 500) +
+  geom_vline(xintercept = 1000)+
+  ggtitle("UMIs per cell")
+
+# Visualize the distribution of genes detected per cell via histogram
+run1.sample4.sorted.filt_metadata %>% 
+  ggplot(aes(color=plex, x=nFeature_RNA, fill= plex)) + 
+  geom_density(alpha = 0.2) + 
+  theme_classic() +
+  scale_x_log10() + 
+  geom_vline(xintercept = 300)+
+  ggtitle("Genes per cell")
+
+
+# Visualize the distribution of genes detected per cell via boxplot
+run1.sample4.sorted.filt_metadata %>% 
+  ggplot(aes(x=plex, y=log10(nFeature_RNA), fill=plex)) + 
+  geom_boxplot() + 
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  theme(plot.title = element_text(hjust=0.5, face="bold")) +
+  ggtitle("Log10 of gene count per cell")
+
+# Visualize the correlation between genes detected and number of UMIs and determine whether strong presence of cells with low numbers of genes/UMIs
+run1.sample4.sorted.filt_metadata %>% 
+  ggplot(aes(x=nCount_RNA, y=nFeature_RNA, color=percent.mt)) + 
+  geom_point() + 
+  scale_colour_gradient(low = "gray90", high = "black") +
+  stat_smooth(method=lm) +
+  scale_x_log10() + 
+  scale_y_log10() + 
+  theme_classic() +
+  geom_vline(xintercept = 1000) +
+  geom_hline(yintercept = 500) +
+  ggtitle("UMI v gene count per cell, coloured by mito%")
+
+
+run1.sample4.sorted.filt_metadata %>% 
+  ggplot(aes(x=nCount_RNA, y=nFeature_RNA, color=percent.mt)) + 
+  geom_point() + 
+  scale_colour_gradient(low = "gray90", high = "black") +
+  stat_smooth(method=lm) +
+  scale_x_log10() + 
+  scale_y_log10() + 
+  theme_classic() +
+  geom_vline(xintercept = 1000) +
+  geom_hline(yintercept = 500) +
+  facet_wrap(~plex)
+
+
+run1.sample4.sorted.filt_metadata %>% 
+  ggplot(aes(x=percent.mt, y=nFeature_RNA, color=nCount_RNA)) + 
+  geom_point() + 
+  scale_colour_gradient(low = "gray90", high = "black") +
+  stat_smooth(method=lm) +
+  scale_x_log10() + 
+  scale_y_log10() + 
+  theme_classic() +
+  geom_vline(xintercept = 1000) +
+  geom_hline(yintercept = 500) +
+  ggtitle("UMI v gene count per cell, coloured by readcount")
+
+# Visualize the distribution of mitochondrial gene expression detected per cell
+run1.sample4.sorted.filt_metadata %>% 
+  ggplot(aes(color=plex, x=percent.mt, fill=plex)) + 
+  geom_density(alpha = 0.2) + 
+  scale_x_log10() + 
+  theme_classic() +
+  geom_vline(xintercept = 5)+
+  ggtitle("Cell density by mito%")
+
+# Visualize the overall complexity of the gene expression by visualizing the genes detected per UMI
+run1.sample4.sorted.filt_metadata %>%
+  ggplot(aes(x=log10GenesPerUMI, color = plex, fill=plex)) +
+  geom_density(alpha = 0.2) +
+  theme_classic() +
+  geom_vline(xintercept = 0.8)
+
+```
+
+Use SingleCellExperiment to look at the top genes, if that will now work.
+```{r}
+mito_genes <- rownames(run1.sample4.sorted.filt)[grep("^Smp-9", rownames(run1.sample4.sorted.filt))]
+
+run1.sample4.sorted.sce <- as.SingleCellExperiment(run1.sample4.sorted.filt)
+run1.sample4.sorted.sce <- perCellQCMetrics(run1.sample4.sorted.sce)
+
+plotHighestExprs(run1.sample4.sorted.sce, exprs_values = "counts")
+ggsave("top50_mostExpressedGenes_run1.sample4.sorted.pdf", width = 20, height = 15, units = c('cm'))
+```
+
+Now, will will perfrom SCTransfrom on the data, and cluster again.
+I am going to use sctransform, which takes the place of NormalizeData, FindVariableFeatures, and ScaleData, takes into account variablitity in sequencing depth, and allows to regress out percent.mt.
+```{r}
+# run sctransform
+run1.sample4.sorted.filt <- SCTransform(run1.sample4.sorted.filt, vars.to.regress = c("percent.mt"), verbose = FALSE, return.only.var.genes = FALSE)
+```
+
+```{r}
+run1.sample4.sorted <- run1.sample4.sorted %>% 
+    SCTransform(vars.to.regress = "percent.mt") %>% RunPCA() %>% FindNeighbors(dims = 1:30) %>% 
+    RunUMAP(dims = 1:30) %>% FindClusters()
+```
+
+Here, we perform PCA on the scaled data. The most variable features selected earlier are used.
+```{r}
+#DefaultAssay(run1.sample4.sorted) <- "SCT"
+
+
+run1.sample4.sorted.filt <- RunPCA(run1.sample4.sorted.filt, features = VariableFeatures(object = run1.sample4.sorted.filt)) #shows top contributing features for the PCs
+VizDimLoadings(run1.sample4.sorted.filt, dims = 1:2, reduction = "pca") #shows the weightings of top contributing features to pcs 1 and 2
+DimHeatmap(run1.sample4.sorted.filt, dims = 1, cells = 500, balanced = TRUE) #plots heatmap of top 500 mist variable cells for PC1, with relative gene expression
+
+ElbowPlot(run1.sample4.sorted.filt, ndims = 50)  #ranks PCs by percentage of variation. A clear dropoff is sometimes seen, though not really here.
+
+```
+
+Next comes clustering and plotting of clusters.
+```{r}
+run1.sample4.sorted.filt <- FindNeighbors(run1.sample4.sorted.filt, dims = 1:40) #here construct k-nearst neighbours graoh based on euclidean distance in PCA space, then refine edge weights based on Jaccard similarity. this takes the number of PCs previously determined as importan (here 15 PCs_)
+run1.sample4.sorted.filt <- FindClusters(run1.sample4.sorted.filt, resolution = 0.5) #this iteratively groups cells using Louvain algorithm (default). Resolution sets the granularity. 0.4-1.2 gives good results for ~3K cells, with larger number suiting larger datasets.
+
+
+
+# Select a range of resolutions
+resolution.range <- seq(from = 0, to = 1, by = 0.2)
+
+# Find clusters using a range of resolutions
+run1.sample4.sorted.filt <- Seurat::FindClusters(object = run1.sample4.sorted.filt, resolution = resolution.range)
+
+clustree(run1.sample4.sorted.filt)
+ggsave("run1.sample4.sorted.filt.clust_40PC_0_to_1_tree_SCT.pdf")
+```
+
+
+Based on the clustree results, I am going to choose an res of 0.8 with 40PCs
+
+```{r}
+run1.sample4.sorted.filt <- FindClusters(run1.sample4.sorted.filt, resolution = 0.8) #this iteratively groups cells using Louvain algorithm (default). Resolution sets the granularity. 0.4-1.2 gives good results for ~3K cells, with larger number suiting larger datasets.
+run1.sample4.sorted.filt <- RunUMAP(run1.sample4.sorted.filt, dims = 1:40) #runs umap to visualise the clusters. Need to set the number of PCs
+DimPlot(run1.sample4.sorted.filt, reduction = "umap", label=T) #visulaises the UMAP
+ggsave("run1.sample4.sorted.filtclust_40PC_0.8res_mtRegressed__after2filt_SCT.pdf")
+
+FeaturePlot(run1.sample4.sorted.filt, features="percent.mt", label=TRUE)
+ggsave("run1.sample4.sorted.filt_40PC_0.8res_mt_SCT.pdf")
+
+FeaturePlot(run1.sample4.sorted.filt, features="nCount_RNA", label=TRUE)
+ggsave("run1.sample4.sorted.filt_40PC_0.8res_UMIs_SCT.pdf")
+
+FeaturePlot(run1.sample4.sorted.filt, features="nFeature_RNA", label=TRUE)
+ggsave("run1.sample4.sorted.filt_40PC_0.8res_genes_SCT.pdf")
+```
+
+Now, import the final somule data object from Carmen
+```{r}
+somules <- readRDS(file = "/Users/ta13/R_tutorials/sporocysts/V9_no_CDSUTR_Tess_Carmen 2/data/Seurat_Object/Final_objects/somules.RDS")
+```
+
+Use somule data to initially project annotations onto miracidia run1 sorted data
+```{r}
+DefaultAssay(run1.sample4.sorted.filt) <- "RNA"
+
+#This is for label transfer
+pair.anchors <- FindTransferAnchors(reference = somules, query = run1.sample4.sorted.filt, dims = 1:40, features = intersect(VariableFeatures(somules), VariableFeatures(run1.sample4.sorted.filt)))
+
+predictions <- TransferData(anchorset = pair.anchors, refdata = Idents(somules), dims = 1:40)
+
+run1.sample4.sorted.filt <- AddMetaData(run1.sample4.sorted.filt, metadata = predictions)
+DimPlot(run1.sample4.sorted.filt, group.by = 'predicted.id', label = T, label.size = 2)
+ggsave("run1.sample4.sorted.filt_labels_from_somules_SCT_mtRegressed.pdf")
+
+DimPlot(run1.sample4.sorted.filt, reduction = "umap", group.by = "plex") #visulaises the UMAP
+ggsave("run1.sample4.sorted.filt_PC38_res0.8_batchRegressed_SCT.pdf")
+```
+
+Extract top marker from the object
+```{r}
+DefaultAssay(run1.sample4.sorted.filt) <- "SCT"
+
+#Find markers roc
+run1.sample4.sorted.filt.markers_roc_RNA <- FindAllMarkers(run1.sample4.sorted.filt, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "roc")
+
+run1.sample4.sorted.filt.top5_roc_RNA=run1.sample4.sorted.filt.markers_roc_RNA %>% group_by(cluster) %>% top_n(n = 5, wt = myAUC)# groups the markers by cluster, then picks the top 5 most differentiually expressed markers
+write.csv(x=run1.sample4.sorted.filt.top5_roc_RNA, file="top5_markerz_roc_run1.sample4.sorted.filt_SCT.csv")
+```
+
+Then, let's save the new metadata file
+```{r}
+ # Save filtered subset to new metadata
+run1.sample4.sorted.filt.metadata <- run1.sample4.sorted.filt@meta.data
+```
+
+Here's lets save the filtered object for future use
+```{r}
+saveRDS(run1.sample4.sorted.filt, file = "run1.v10.sample4.sorted.filt.rds") #saves this version of the dataset
+
+```
+
+This object should now be ready to integrate with the other samples.
