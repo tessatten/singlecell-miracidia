@@ -1,0 +1,349 @@
+---
+title: "clean_integration"
+author: "T Attenborough"
+date: "09/01/2023"
+output: html_document
+---
+
+```{r}
+library(Seurat) #Seurat v4.0.2
+library(dplyr)
+library(patchwork)
+library(here)
+library(ggplot2)
+library(clustree)
+library(SingleCellExperiment)
+library(scater)
+library(DoubletFinder)
+library(zellkonverter)
+library(basilisk)
+
+#sessionInfo()
+```
+
+```{r}
+run1.combined.v10 <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.combined.v10_integrated_55.rds")
+```
+
+```{r}
+st=format(Sys.time(), "%Y-%m-%d") 
+st
+```
+
+Import annotation information
+```{r}
+v9_genelist <- read.csv("/Users/ta13/R_git/r_teaching/WBPS17_genelist.csv", stringsAsFactors = FALSE, header = TRUE) #import the marker data from somule papaer
+v9_genelist$X <- NULL 
+```
+
+First, I will import the R objects containing the filtered sorted and unsorted cells
+```{r}
+run1.sample1.sorted.filt <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.v10.sample1.sorted.filt.rds")
+
+run1.sample2.unsorted.filt <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.v10.sample2.unsorted.filt_52.rds")
+
+run1.sample3.unsorted.filt <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.v10.sample3.unsorted.filt_52.rds")
+
+run1.sample4.sorted.filt <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.v10.sample4.sorted.filt.rds")
+```
+
+```{r}
+run1.sorted.filt <- merge(run1.sample1.sorted.filt, y = run1.sample4.sorted.filt, add.cell.ids = c("sample1", "sample4"), project = "mira_sorted")
+
+run1.unsorted.filt <- merge(run1.sample2.unsorted.filt, y = run1.sample3.unsorted.filt, add.cell.ids = c("sample2", "sample3"), project = "mira_unsorted")
+
+run1.sorted.filt <- SCTransform(run1.sorted.filt, vars.to.regress = c("percent.mt", "plex"), verbose = FALSE, return.only.var.genes = FALSE)
+
+run1.unsorted.filt <- SCTransform(run1.unsorted.filt, vars.to.regress = c("percent.mt", "plex"), verbose = FALSE, return.only.var.genes = FALSE)
+```
+
+Find variable features
+```{r}
+type_list <- c(run1.sorted.filt, run1.unsorted.filt)
+# select features that are repeatedly variable across datasets for integration
+features <- SelectIntegrationFeatures(object.list = type_list, nfeatures = 3000)
+type_list <- PrepSCTIntegration(object.list = type_list, anchor.features = features)
+```
+
+Identify anchors and integrate
+```{r}
+run1.anchors <- FindIntegrationAnchors(object.list = type_list, anchor.features = features, normalization.method = "SCT")
+# this command creates an 'integrated' data assay
+run1.combined.v10 <- IntegrateData(anchorset = run1.anchors, normalization.method = "SCT")
+```
+
+Remove individual seurat objects not needed anyome
+```{r}
+# remove all objects that will not be used.
+rm(run1.sample1.sorted.filt)
+rm(run1.sample2.unsorted.filt)
+rm(run1.sample3.unsorted.filt)
+rm(run1.sample4.sorted.filt)
+
+rm(run1.sorted.filt)
+rm(run1.unsorted.filt)
+
+rm(type_list)
+rm(run1.anchors)
+# run garbage collect to free up memory
+gc()
+```
+
+```{r}
+#Check how many PCs to use for the data using Mathews Molecular cross validation
+source("/Users/ta13/R_tutorials/sporocysts/code.R")
+mcv = molecularCrossValidation(run1.combined.v10@assays$RNA@counts, varGenes = VariableFeatures(run1.combined.v10),normalisation = minimalSeuratV3)
+
+plotMCV(mcv)
+```
+Min PCs 25
+
+
+
+```{r}
+# specify that we will perform downstream analysis on the integrated data note that the
+# original unmodified data still resides in the 'RNA' assay
+DefaultAssay(run1.combined.v10) <- "integrated"
+
+# Run the standard workflow for visualization and clustering
+run1.combined.v10 <- RunPCA(run1.combined.v10, npcs = 100, verbose = FALSE)
+ElbowPlot(run1.combined.v10, ndims = 100)  #ranks PCs by percentage of variation. A clear dropoff is sometimes seen, though not really here.
+ggsave("run1.combined.v10.integrated.elbow.pdf")
+
+run1.combined.v10 <- RunUMAP(run1.combined.v10, reduction = "pca", dims = 1:55)
+run1.combined.v10 <- FindNeighbors(run1.combined.v10, reduction = "pca", dims = 1:55)
+run1.combined.v10 <- FindClusters(run1.combined.v10, resolution = 0.5)
+
+# Select a range of resolutions
+resolution.range <- seq(from = 0, to = 1.5, by = 0.1)
+
+# Find clusters using a range of resolutions
+run1.combined.v10 <- Seurat::FindClusters(object = run1.combined.v10, resolution = resolution.range)
+
+clustree(run1.combined.v10)
+ggsave("run1.combined.v10.clust_55PC_0_to_1.5_tree_inte_52_plex.pdf",  width = 25, height = 15, units = c('cm'))
+```
+
+```{r}
+run1.combined.v10 <- RunUMAP(run1.combined.v10, reduction = "pca", dims = 1:55)
+run1.combined.v10 <- FindNeighbors(run1.combined.v10, reduction = "pca", dims = 1:55)
+p2 <- DimPlot(run1.combined.v10, reduction = "umap", group.by = "plex", repel = TRUE, shuffle = TRUE)
+p2
+ggsave("filtered_PCs/run1clust-55-PC_integrate_52_plex.pdf", width = 25, height = 15, units = c('cm'))
+
+run1.combined.v10 <- FindClusters(run1.combined.v10, resolution = 1)
+p2 <- DimPlot(run1.combined.v10, reduction = "umap", label = TRUE, repel = TRUE)
+p2
+ggsave("filtered_PCs/run1clust-55-PC-1-res_integrate_52_clean.pdf")
+
+plot1 <- FeaturePlot(run1.combined.v10, features = "Smp-071050")
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75, max.overlaps = Inf)
+```
+
+```{r}
+DefaultAssay(run1.combined.v10) <- "integrated"
+
+run1.combined.v10 <- FindClusters(run1.combined.v10, resolution = 2)
+
+p2 <- DimPlot(run1.combined.v10, reduction = "umap", label = TRUE, repel = TRUE)
+p2
+ggsave("filtered_PCs/run1clust-55-PC-2-res_integrate_52_clean.pdf")
+DefaultAssay(run1.combined.v10) <- "RNA"
+
+VlnPlot(run1.combined.v10, features = "Smp-071050")
+DefaultAssay(run1.combined.v10) <- "integrated"
+
+run1.combined.v10 <- FindClusters(run1.combined.v10, resolution = 3)
+p2 <- DimPlot(run1.combined.v10, reduction = "umap", label = TRUE, repel = TRUE)
+p2
+ggsave("filtered_PCs/run1clust-55-PC-3-res_integrate_52_clean.pdf")
+
+DefaultAssay(run1.combined.v10) <- "RNA"
+
+VlnPlot(run1.combined.v10, features = "Smp-071050")
+DefaultAssay(run1.combined.v10) <- "integrated"
+
+```
+
+Cluster 36 gives the neuron 6 cluster
+
+Print the cell IDs of the cluster 36 cells
+```{r}
+Idents(object = run1.combined.v10)
+WhichCells(object = run1.combined.v10, ident = '36')
+neuron6IDs <- WhichCells(object = run1.combined.v10, ident = '36')
+```
+
+Re-run the clustering at 1 res
+```{r}
+run1.combined.v10 <- FindNeighbors(run1.combined.v10, dims = 1:55)
+run1.combined.v10 <- FindClusters(run1.combined.v10, resolution = 1,  algorithm = 1)
+run1.combined.v10 <- RunUMAP(run1.combined.v10, dims = 1:55)
+DimPlot(run1.combined.v10, reduction = "umap", label = TRUE)+ NoLegend()
+ggsave("run1.combined.v10_pc55_res1.pdf", width = 15, height = 15, units = c('cm'))
+
+```
+
+How many clusters?
+```{r}
+table(Idents(run1.combined.v10))
+```
+
+Rename the neuron 6 cluster as 5
+
+```{r}
+Idents(run1.combined.v10, cells = c(neuron6IDs)) <- '18'
+head(Idents(run1.combined.v10))
+table(Idents(run1.combined.v10))
+```
+
+PLot the UMAP
+```{r}
+DimPlot(run1.combined.v10, reduction = "umap", label = TRUE)+ NoLegend()
+```
+
+```{r}
+FeaturePlot(run1.combined.v10, features="percent.mt", label=TRUE)
+ggsave("run1.combined.v10_55PC_1res_mt_SCT_52_plex.pdf")
+
+FeaturePlot(run1.combined.v10, features="nCount_RNA", label=TRUE)
+ggsave("run1.combined.v10_55PC_1res_UMIs_SCT_52_plex.pdf")
+
+FeaturePlot(run1.combined.v10, features="nFeature_RNA", label=TRUE)
+ggsave("run1.combined.v10_55PC_1res_genes_SCT_52_plex.pdf")
+```
+Find all markers
+```{r}
+DefaultAssay(run1.combined.v10) <- "SCT"
+run1.combined.v10 <- SCTransform(run1.combined.v10, vars.to.regress = c("percent.mt", "plex"), verbose = FALSE, return.only.var.genes = FALSE)
+
+PrepSCTFindMarkers(run1.combined.v10, assay = "SCT", verbose = TRUE)
+
+#find all markers
+run1.combined.v10.markers_roc_no_lbls <- FindAllMarkers(run1.combined.v10, only.pos = TRUE, min.pct = 0.0, logfc.threshold = 0.0, test.use = "roc", return.thresh = 0)
+
+run1.combined.v10.top5_roc_no_lbls=run1.combined.v10.markers_roc_no_lbls %>% group_by(cluster) %>% top_n(n = 5, wt = myAUC)# groups the markers by cluster, then picks the top 5 most differentiually expressed markers
+write.csv(x=run1.combined.v10.markers_roc_no_lbls, file="top5_markerz_roc_no_lbls_run1.combined.v10_jan23.csv")
+write.csv(x=run1.combined.v10.markers_roc_no_lbls, file="markerz_roc_no_lbls_run1.combined.v10_jan23.csv")
+
+```
+
+Plot top 5 markers of each cluster by AUC
+```{r}
+run1.combined.v10.markers_roc_no_lbls$gene <- gsub('\\_', '-', run1.combined.v10.markers_roc_no_lbls$gene) #replace dashes in geneid with underscores
+dotplot_features=run1.combined.v10.markers_roc_no_lbls %>% group_by(cluster) %>% top_n(n = 5, wt = myAUC)
+
+DotPlot(object = run1.combined.v10, features = unique(dotplot_features$gene)) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ scale_color_viridis(discrete = FALSE)
+ggsave("run1.combined.v10_top5genes_roc_nolbl_jul5.pdf", width = 35, height = 15, units = c('cm'))
+
+dotplot_features=run1.combined.v10.markers_roc_no_lbls %>% group_by(cluster) %>% top_n(n = 3, wt = myAUC)
+
+DotPlot(object = run1.combined.v10, features = unique(dotplot_features$gene)) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ scale_color_viridis(discrete = FALSE)
+ggsave("run1.combined.v10_top3genes_roc_nolbl_jul5.pdf", width = 30, height = 15, units = c('cm'))
+
+```
+
+```{r}
+saveRDS(run1.combined.v10, file = "run1.combined.v10_integrated_55.rds") #saves this version of the dataset
+
+
+```
+
+
+
+```{r}
+DefaultAssay(run1.combined.v10) <- "integrated"
+run1.combined.v10 <- RenameIdents(object = run1.combined.v10, 
+                               "0" = "Muscle 1",
+                               "1" = "Stem C",
+                               "2" = "Stem D",
+                               "3" = "Stem F",
+                               "4" = "Stem A",
+                               "5" = "Stem B",
+                               "6" = "Neuron 1",
+                               "7" = "Muscle 2",
+                               "8" = "Neuron 2",
+                               "9" = "Parenchyma 1",
+                               "10" = "Stem E",
+                               "11" = "Parenchyma 2",
+                               "12" = "Protonephridia",
+                               "13" = "Tegument",
+                               "14" = "Neuron 3",
+                               "15" = "Neuron 5",
+                               "16" = "Stem G",
+                               "17" = "Neuron 4", 
+                              "18" = "Neuron 6")
+
+
+run1.combined.v10[["merge.ident"]] <- Idents(object = run1.combined.v10)
+run1.combined.v10[["may.ident"]] <- Idents(object = run1.combined.v10)
+
+DimPlot(run1.combined.v10, reduction = "umap", label=TRUE) #visulaises the UMAP
+p2 <- DimPlot(run1.combined.v10, reduction = "umap", label = TRUE, repel = TRUE)
+p2
+
+ggsave("run1.combined.v10_55PC_1res_lbl.pdf")
+```
+
+```{r}
+DefaultAssay(run1.combined.v10) <- "SCT"
+run1.combined.v10 <- SCTransform(run1.combined.v10, vars.to.regress = c("percent.mt", "plex"), verbose = FALSE, return.only.var.genes = FALSE)
+
+PrepSCTFindMarkers(run1.combined.v10, assay = "SCT", verbose = TRUE)
+
+#find all markers
+run1.combined.v10.markers_roc_with_lbls <- FindAllMarkers(run1.combined.v10, only.pos = TRUE, min.pct = 0.0, logfc.threshold = 0.0, test.use = "roc", return.thresh = 0)
+
+run1.combined.v10.top5_roc_with_lbls=run1.combined.v10.markers_roc_with_lbls %>% group_by(cluster) %>% top_n(n = 5, wt = myAUC)# groups the markers by cluster, then picks the top 5 most differentiually expressed markers
+write.csv(x=run1.combined.v10.top5_roc_with_lbls, file="top5_markerz_roc_with_lbls_run1.combined.v10_jan23.csv")
+write.csv(x=run1.combined.v10.markers_roc_with_lbls, file="markerz_roc_with_lbls_run1.combined.v10_jan23.csv")
+```
+
+Add the annotations from v9 to the genelist
+```{r}
+run1.combined.v10.markers_roc_with_lbls$gene <- gsub('\\-', '_', run1.combined.v10.markers_roc_with_lbls$gene) #replace dashes in geneid with underscores
+
+run1.combined.v10.markers_roc_with_lbls <- run1.combined.v10.markers_roc_with_lbls %>% left_join(v9_genelist, by = c("gene" = "Name")) #check the top 5 marker genes are also in the somule paper
+write.csv(x=run1.combined.v10.markers_roc_with_lbls, file=paste0('markerz_roc_with_lbls_run1.combined.v10_annotate_', st, '.csv')) #save this as a csv
+```
+
+Add the annotations from v9 to the genelist
+```{r}
+run1.combined.v10.top5_roc_with_lbls$gene <- gsub('\\-', '_', run1.combined.v10.top5_roc_with_lbls$gene) #replace dashes in geneid with underscores
+
+run1.combined.v10.top5_roc_with_lbls <- run1.combined.v10.top5_roc_with_lbls %>% left_join(v9_genelist, by = c("gene" = "Name")) #check the top 5 marker genes are also in the somule paper
+write.csv(x=run1.combined.v10.top5_roc_with_lbls, file=paste0('top5_markerz_roc_with_lbls_run1.combined.v10_annotate_', st, '.csv')) #save this as a csv
+```
+
+Plot top 5 markers of each cluster by AUC
+```{r}
+run1.combined.v10.markers_roc_with_lbls$gene <- gsub('\\_', '-', run1.combined.v10.markers_roc_with_lbls$gene) #replace dashes in geneid with underscores
+dotplot_features=run1.combined.v10.markers_roc_with_lbls %>% group_by(cluster) %>% top_n(n = 5, wt = myAUC)
+
+DotPlot(object = run1.combined.v10, features = unique(dotplot_features$gene)) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ scale_color_viridis(discrete = FALSE)
+ggsave("run1.combined.v10_top5genes_roc_withlbl_jul5.pdf", width = 35, height = 15, units = c('cm'))
+
+dotplot_features=run1.combined.v10.markers_roc_with_lbls %>% group_by(cluster) %>% top_n(n = 3, wt = myAUC)
+
+DotPlot(object = run1.combined.v10, features = unique(dotplot_features$gene)) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ scale_color_viridis(discrete = FALSE)
+ggsave("run1.combined.v10_top3genes_roc_withlbl_jul5.pdf", width = 30, height = 15, units = c('cm'))
+```
+
+
+```{r}
+plot1 <- FeaturePlot(run1.combined.v10, features = "Smp-071050")
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75, max.overlaps = Inf)
+```
+
+Make a new color pallete for the 'fancy' umap
+```{r}
+new_pal <- c("#c4b7cb","#007aaa","#ffb703","#c40c18","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#57467B", "#FFFD82", "#2191FB", "#690500", "#B3E9C7", "#B57F50","#2C514C","#754043" ,"#69A297" )
+scales::show_col(new_pal)
+plot1 <- DimPlot(run1.combined.v10, reduction = "umap", label = FALSE, repel = TRUE, label.box = FALSE) + NoLegend() +scale_color_manual(values = new_pal)
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75)
+
+ggsave("run1.combined.v10_umap_fancylabels_jan23.pdf", width = 25, height = 20, units = c('cm'))
+ggsave("run1.combined.v10_umap_fancylabels_jan23_small.pdf")
+```
+
+
