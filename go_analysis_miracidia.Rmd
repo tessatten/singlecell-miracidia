@@ -1,0 +1,102 @@
+---
+title: "go_analysis_miracidia"
+author: "T Attenborough"
+date: "2023-10-12"
+output: html_document
+---
+
+```{r}
+library(Seurat) #Seurat v4.0.2
+library(dplyr)
+library(patchwork)
+library(here)
+library(ggplot2)
+library(clustree)
+library(SingleCellExperiment)
+library(scater)
+library(zellkonverter)
+library(basilisk)
+library(RColorBrewer)
+library(dittoSeq)
+library(biomaRt) #initialise biomaRt
+library(rtracklayer) #initialise biomaRt
+library(hues)
+library(rstatix)
+library(cowplot)
+library(magick)
+library(tidyverse)
+library(forcats)
+library(topGO)
+library(data.table)
+#sessionInfo()
+```
+
+```{r}
+run1.combined.v10 <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.combined.v10_integrated_55.rds")
+
+DefaultAssay(run1.combined.v10) <- "RNA"
+```
+
+```{r}
+st=format(Sys.time(), "%Y-%m-%d") 
+st
+```
+
+Import go term file from WBPS biomart
+```{r}
+myGO <- read.delim("/Users/ta13/R_git/GOterms_v10_fromWBPS18.txt", header = TRUE, sep = "\t", dec = ".")
+```
+
+Remove the col with genome ID: this is the same in every row
+```{r}
+myGO$Genome.project <- NULL
+```
+
+Collapse the columns by 
+```{r}
+myGO_squish = as.data.table(myGO)
+myGO_squish = myGO_squish[, lapply(.SD, paste0, collapse=","), by=Gene.stable.ID]
+myGO_squish = as.data.frame(myGO_squish)
+```
+
+```{r}
+write.table(myGO_squish, "/Users/ta13/R_git/GOterm_dict_WBPS18.txt", append = FALSE, sep = " ", dec = ".",
+            row.names = FALSE, col.names = FALSE)
+```
+
+
+Make a GO term dictionary from gene:GO mappings
+```{r}
+geneID2GO <- readMappings(file = "/Users/ta13/R_git/GOterm_dict_WBPS18.txt", sep = " ") 
+```
+
+```{r}
+geneUniverse <- names(geneID2GO) 
+```
+
+Only want to include genes in the gene universe that were detected in the dataset.
+Extract a list of all genes for comparison
+```{r}
+allGenesInMira <- rownames(x = run1.combined.v10)
+
+head(allGenesInMira)
+
+allGenesInMira <- data.frame(allGenesInMira)
+allGenesInMira$allGenesInMira <- gsub('\\-', '_', allGenesInMira$allGenesInMira) #replace dashes with underscores
+write.csv(x=allGenesInMira, file="allGenesInMira.csv") #save this as a csv
+```
+
+So here, I will use only the genes detected in the miracidia data as the gene universe. topGO doc says that: "The set of all genes from the array/study will be referred from now on as the gene universe."
+
+Import the list of genes in the mira dataset
+```{r}
+listOfMiraGenes <- read.csv("/Users/ta13/R_git/v10_miracidia/allGenesInMira.csv", header=TRUE, stringsAsFactors=FALSE)
+listOfMiraGenes$X <- NULL
+
+listOfMiraGenes <- listOfMiraGenes$allGenesInMira
+```
+
+Find the common elements from the full gene list from schisto, and the genes detected in miracidia data
+```{r}
+miracidia_geneUniverse <- intersect(geneUniverse,listOfMiraGenes)
+```
