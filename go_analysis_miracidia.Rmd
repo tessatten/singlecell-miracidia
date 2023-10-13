@@ -44,7 +44,7 @@ st
 
 Import go term file from WBPS biomart
 ```{r}
-myGO <- read.delim("/Users/ta13/R_git/GOterms_v10_fromWBPS18.txt", header = TRUE, sep = "\t", dec = ".")
+myGO <- read.delim("/Users/ta13/R_git/GOterms_v10_fromWBPS18_justgenes.txt", header = TRUE, sep = "\t", dec = ".")
 ```
 
 Remove the col with genome ID: this is the same in every row
@@ -83,14 +83,14 @@ head(allGenesInMira)
 
 allGenesInMira <- data.frame(allGenesInMira)
 allGenesInMira$allGenesInMira <- gsub('\\-', '_', allGenesInMira$allGenesInMira) #replace dashes with underscores
-write.csv(x=allGenesInMira, file="allGenesInMira.csv") #save this as a csv
+write.table(x=allGenesInMira, file="v10_GO_genelists/allGenesInMira.csv", col.names=FALSE, row.names=FALSE)
 ```
 
 So here, I will use only the genes detected in the miracidia data as the gene universe. topGO doc says that: "The set of all genes from the array/study will be referred from now on as the gene universe."
 
 Import the list of genes in the mira dataset
 ```{r}
-listOfMiraGenes <- read.csv("/Users/ta13/R_git/v10_miracidia/allGenesInMira.csv", header=TRUE, stringsAsFactors=FALSE)
+listOfMiraGenes <- read.csv("/Users/ta13/R_git/filtered_v10_miracidia/allGenesInMira.csv", header=TRUE, stringsAsFactors=FALSE)
 listOfMiraGenes$X <- NULL
 
 listOfMiraGenes <- listOfMiraGenes$allGenesInMira
@@ -98,5 +98,328 @@ listOfMiraGenes <- listOfMiraGenes$allGenesInMira
 
 Find the common elements from the full gene list from schisto, and the genes detected in miracidia data
 ```{r}
-miracidia_geneUniverse <- intersect(geneUniverse,listOfMiraGenes)
+miracidia_geneUniverse <- intersect(myGO_squish$Gene.stable.ID,listOfMiraGenes)
+head(miracidia_geneUniverse)
 ```
+
+Next, generate the gene lists for each cluster (and tissue type). Start by importing the marker gene list.
+```{r}
+markerGeneList <- read.csv("/Users/ta13/R_git/filtered_v10_miracidia/markerz_roc_with_lbls_run1.combined.v10_annotate_2023-01-23.csv", header=TRUE, stringsAsFactors=FALSE)
+```
+
+```{r}
+table(markerGeneList$cluster)
+```
+
+
+
+```{r}
+clustX <- markerGeneList[grepl('Muscle 1',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Muscle-1_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Muscle 2',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Muscle-2_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Muscle 1',markerGeneList$cluster) | grepl('Muscle 2',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+table(clustX$gene)
+clustX <- unique(clustX$gene)
+
+write.table(x=clustX, file="v10_GO_genelists/Muscle-all_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Neuron 1',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-1_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Neuron 2',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-2_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Neuron 3',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-3_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Neuron 4',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-4_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Neuron 5',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-5_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Neuron 6',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-6_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Neuron 1',markerGeneList$cluster) | grepl('Neuron 2',markerGeneList$cluster) | grepl('Neuron 3',markerGeneList$cluster) | grepl('Neuron 5',markerGeneList$cluster) | grepl('Neuron 6',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+table(clustX$gene)
+clustX <- unique(clustX$gene)
+
+write.table(x=clustX, file="v10_GO_genelists/Neuron-all_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Parenchyma 1',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Parenchyma-1_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Parenchyma 2',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Parenchyma-2_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Parenchyma 1',markerGeneList$cluster) | grepl('Parenchyma 2',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+table(clustX$gene)
+clustX <- unique(clustX$gene)
+
+write.table(x=clustX, file="v10_GO_genelists/Parenchyma-all_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Protonephridia',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Protonephridia_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Stem A',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Stem-A_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Stem B',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Stem-B_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Stem C',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Stem-C_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Stem D',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Stem-D_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Stem E',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Stem-E_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Stem F',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Stem-F_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Stem G',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Stem-G_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Stem A',markerGeneList$cluster) | grepl('Stem B',markerGeneList$cluster) | grepl('Stem C',markerGeneList$cluster) | grepl('Stem D',markerGeneList$cluster) | grepl('Stem E',markerGeneList$cluster) | grepl('Stem F',markerGeneList$cluster) | grepl('Stem G',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+table(clustX$gene)
+clustX <- unique(clustX$gene)
+
+write.table(x=clustX, file="v10_GO_genelists/Stem-all_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
+clustX <- markerGeneList[grepl('Tegument',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Tegument_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+Now run these via terminal - takes list of gene IDs and GO type, produces file with significant go terms
+```{r}
+Rscript TopGO_mira_v10.R Muscle-1_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Muscle-2_Markers_Oct12_justgenes.csv BP
+
+Rscript TopGO_mira_v10.R Neuron-1_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Neuron-2_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Neuron-3_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Neuron-4_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Neuron-5_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Neuron-6_Markers_Oct12_justgenes.csv BP
+
+Rscript TopGO_mira_v10.R Parenchyma-1_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Parenchyma-2_Markers_Oct12_justgenes.csv BP
+
+Rscript TopGO_mira_v10.R Protonephridia_Markers_Oct12_justgenes.csv BP
+
+Rscript TopGO_mira_v10.R Tegument_Markers_Oct12_justgenes.csv BP
+
+Rscript TopGO_mira_v10.R Stem-A_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Stem-B_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Stem-C_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Stem-D_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Stem-E_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Stem-F_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Stem-G_Markers_Oct12_justgenes.csv BP
+```
+
+Now, import the full list of GO results from all the clusters
+```{r}
+topGO_summary_all <- read.csv("/Users/ta13/R_git/filtered_v10_miracidia/v10_GO_genelists/topGO_summary_miracidia_onv10.csv", stringsAsFactors = FALSE, header = TRUE) #import the marker data from somule papaer
+```
+
+```{r}
+str(topGO_summary_all)
+```
+```{r}
+
+new_pal <- c("#9E0059","#007aaa","#ffb703","#c40c18","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#B3E9C7", "#FFFD82", "#2191FB", "#690500", "#57467B", "#B57F50","#2C514C","#c4b7cb" ,"#69A297" )
+```
+
+```{r}
+new_pal <- unique(topGO_summary_all$Colour)
+table(topGO_summary_all$Colour)
+table(topGO_summary_all$Cell.type)
+
+scales::show_col(new_pal)
+#fct_reorder(topGO_summary_sporos$Term, topGO_summary_sporos$Cell.type, min)
+ggplot(data = topGO_summary_all, aes(x = fct_reorder2(Term, negativelog10FDR, Cell.type), y = negativelog10FDR, fill = Cell.type)) + geom_bar(stat="identity",position = "dodge")+ 
+  scale_colour_identity()+
+       coord_flip()+theme_bw()+scale_fill_manual(values = new_pal)+ labs(fill = " ", x = " ", y = "-log10FDR")+theme(axis.text.x=element_text(size=15),axis.text.y=element_text(size=12), axis.title.x = element_text(size = 18),legend.key.size = unit(0.8, 'cm'), legend.text = element_text(size=10))
+ggsave("v10_GO_genelists/topGO_all_filtv10_plot1_longlist.pdf", width = 20, height = 55, units = c('cm'))
+```
+
+```{r}
+topGO_summary_sporos_long_2genes <- topGO_summary_all %>%
+  filter(str_detect(genes, ","))
+```
+]
+```{r}
+ggplot(data = topGO_summary_all, aes(x = fct_reorder2(Term, negativelog10FDR, Cell.type), y = negativelog10FDR, fill = Cell.type)) + geom_bar(stat="identity",position = "dodge")+ 
+  scale_colour_identity()+
+       coord_flip()+theme_bw()+scale_fill_manual(values = new_pal)+ labs(fill = " ", x = " ", y = "-log10FDR")+theme(axis.text.x=element_text(size=15),axis.text.y=element_text(size=12), axis.title.x = element_text(size = 18),legend.key.size = unit(0.8, 'cm'), legend.text = element_text(size=10))
+ggsave("v10_GO_genelists/topGO_all_filtv10_plot1_longlist_twogenes.pdf", width = 20, height = 50, units = c('cm'))
+```
+
+
+
