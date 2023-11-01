@@ -1,0 +1,275 @@
+---
+title: "prep_all_mira_forscvelo"
+author: "T Attenborough"
+date: "11/01/2023"
+output: html_document
+---
+
+
+```{r, message=FALSE}
+library(remotes)
+library(Seurat)
+library(zeallot) # For %<-% that unpacks lists in the Python manner
+library(DropletUtils)
+library(tidyverse)
+library(GGally) # For ggpairs
+library(scales)
+library(plotly)
+library(BUSpaRse)
+library(SeuratWrappers)
+library(SeuratData)
+library(SeuratDisk)
+theme_set(theme_bw())
+```
+
+```{r}
+mira.big.forvelo <- merge(commCells_sample1, y = c(commCells_sample2, commCells_sample3, commCells_sample4), add.cell.ids = c("Sample 1", "Sample 2", "Sample 3", "Sample 4"), project = "run1.combined")
+mira.big.forvelo
+```
+
+Here's lets save the filtered object for future use
+```{r}
+saveRDS(mira.big.forvelo, file = "mira.big.forvelo.no.integrate.rds") #saves this version of the dataset
+mira.big.forvelo <- readRDS(file = "/Users/ta13/R_git/mira_phate/mira.big.forvelo.no.integrate.rds")
+
+```
+
+If you want to remove the ZW genes....
+```{r}
+mira.big.forvelo <- subset(mira.big.forvelo, features = mygenesNoZW$genes)
+
+```
+
+```{r}
+run1.combined <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.combined.v10_integrated_55.rds")
+
+DefaultAssay(run1.combined) <- "RNA"
+```
+
+```{r}
+DefaultAssay(run1.combined) <- "integrated"
+run1.combined <- RenameIdents(object = run1.combined, 
+                               "0" = "Muscle 1",
+                               "1" = "Stem C",
+                               "2" = "Stem D",
+                               "3" = "Stem F",
+                               "4" = "Stem A",
+                               "5" = "Stem B",
+                               "6" = "Neuron 1",
+                               "7" = "Muscle 2",
+                               "8" = "Neuron 2",
+                               "9" = "Parenchyma 1",
+                               "10" = "Stem E",
+                               "11" = "Parenchyma 2",
+                               "12" = "Protonephridia",
+                               "13" = "Tegument",
+                               "14" = "Neuron 3",
+                               "15" = "Neuron 5",
+                               "16" = "Stem G",
+                               "17" = "Neuron 4", 
+                              "18" = "Neuron 6")
+
+
+run1.combined[["merge.ident"]] <- Idents(object = run1.combined)
+run1.combined[["may.ident"]] <- Idents(object = run1.combined)
+run1.combined[["temp.ident"]] <- Idents(object = run1.combined)
+
+DimPlot(run1.combined, reduction = "umap", label=TRUE) #visulaises the UMAP
+p2 <- DimPlot(run1.combined, reduction = "umap", label = TRUE, repel = TRUE)
+p2
+
+ggsave("run1.combined.v10_55PC_1res_lbl.pdf")
+```
+
+```{r}
+
+run1.combined <- subset(run1.combined, features = mygenesNoZW$genes)
+
+```
+
+Extract list with metadata
+```{r}
+run1.combined_metadata <- run1.combined@meta.data
+
+mira.big.forvelo_metadata <- mira.big.forvelo@meta.data
+```
+
+```{r}
+library(tidyverse)
+run1.combined_metadata <- tibble::rownames_to_column(run1.combined_metadata, "Cell.IDs")
+mira.big.forvelo_metadata <- tibble::rownames_to_column(mira.big.forvelo_metadata, "Cell.IDs")
+
+run1.combined_metadata$Cell.IDs <- strtrim(run1.combined_metadata$Cell.IDs, 24)
+
+run1.combined_metadata$Cell.IDs <- str_to_title(run1.combined_metadata$Cell.IDs)
+mira.big.forvelo_metadata$Cell.IDs <- str_to_title(mira.big.forvelo_metadata$Cell.IDs)
+
+mira.big.forvelo_metadata$Cell.IDs <- str_replace_all(string=mira.big.forvelo_metadata$Cell.IDs, pattern=" ", repl="")
+```
+
+```{r}
+#commonsmeta <- inner_join(run1.combined_metadata, mira.big.forvelo_metadata)
+commonsmeta <- inner_join(run1.combined_metadata, mira.big.forvelo_metadata, by = "Cell.IDs")
+
+
+```
+
+
+Combine metadat. I am going to do an inner join: only if cellID is in both metadata tables
+```{r}
+commonsmeta <- merge(run1.combined_metadata, mira.big.forvelo_metadata, by = "Cell.IDs")
+commonsmeta$stage <- "miracidia"
+```
+
+Then i am going to update the metadata with the combined metadata
+```{r}
+mira.big.forvelo@meta.data <- commonsmeta
+```
+
+
+And now export of velocity analysis
+```{r}
+write.csv(x = mira.big.forvelo@meta.data, file = 'meta_filtered_fromOG_mira_big_forvelo_v10_newlbls.csv')
+write.csv(x = t(as.matrix(mira.big.forvelo@assays$sf@counts)), file = 'spliced_raw_filtered_fromOG_mira_big_forvelo_v10.csv')
+write.csv(x = t(as.matrix(mira.big.forvelo@assays$uf@counts)), file = 'unspliced_raw_filtered_fromOG_mira_big_forvelo_v10.csv')
+```
+
+
+```{r}
+table(mira.big.forvelo@meta.data$plex.x)
+```
+
+
+
+And now export of velocity analysis
+```{r}
+write.csv(x = mira.big.forvelo@meta.data, file = 'meta_filtered_fromOG_mira_big_forvelo_noZW.csv')
+write.csv(x = t(as.matrix(mira.big.forvelo@assays$sf@counts)), file = 'spliced_raw_filtered_fromOG_mira_big_forvelo_noZW.csv')
+write.csv(x = t(as.matrix(mira.big.forvelo@assays$uf@counts)), file = 'unspliced_raw_filtered_fromOG_mira_big_forvelo_noZW.csv')
+```
+
+Import also the sporo velo data
+```{r}
+sporo_veloCells <- readRDS(file = "/Users/ta13/R_git/velo_sporo/commCells_sporocysts.rds")
+sporo_veloCells@meta.data$plex.x <- "sporo"
+sporo_veloCells@meta.data$temp.ident <- sporo_veloCells@meta.data$may.ident
+
+```
+
+Just merge them?
+```{r}
+mira_and_sporo_velo <- merge(mira.big.forvelo, y = sporo_veloCells, add.cell.ids = c("mira_velo", "sporo_velo"), project = "mira_sporo")
+
+```
+
+```{r}
+table(mira_and_sporo_velo@meta.data$plex.x)
+table(mira_and_sporo_velo@meta.data$stage)
+table(mira_and_sporo_velo@meta.data$temp.ident)
+table(mira_and_sporo_velo@meta.data$may.ident)
+table(mira_and_sporo_velo@meta.data$type.x)
+
+```
+
+And now export of velocity analysis
+```{r}
+write.csv(x = mira_and_sporo_velo@meta.data, file = 'meta_filtered_fromOG_mira_and_sporo.csv')
+write.csv(x = t(as.matrix(mira_and_sporo_velo@assays$sf@counts)), file = 'spliced_raw_filtered_fromOG_mira_and_sporo.csv')
+write.csv(x = t(as.matrix(mira_and_sporo_velo@assays$uf@counts)), file = 'unspliced_raw_filtered_fromOG_mira_and_sporo.csv')
+```
+
+Just merge them?
+```{r}
+mira_and_sporo_velo <- merge(mira.big.forvelo, y = sporo_veloCells, add.cell.ids = c("mira_velo", "sporo_velo"), project = "mira_sporo")
+
+```
+
+
+```{r}
+justsample1 <- subset(x = mira_and_sporo_velo, subset = plex.x == "sample1")
+justsample1mira_and_sporo_velo <- merge(justsample1, y = sporo_veloCells, add.cell.ids = c("mirasample1_velo", "sporo_velo"), project = "mirasample1_sporo")
+
+```
+
+And now export of velocity analysis
+```{r}
+write.csv(x = justsample1mira_and_sporo_velo@meta.data, file = 'meta_filtered_fromOG_justsample1mira_and_sporo_velo.csv')
+write.csv(x = t(as.matrix(justsample1mira_and_sporo_velo@assays$sf@counts)), file = 'spliced_raw_filtered_fromOG_justsample1mira_and_sporo_velo.csv')
+write.csv(x = t(as.matrix(justsample1mira_and_sporo_velo@assays$uf@counts)), file = 'unspliced_raw_filtered_fromOG_justsample1mira_and_sporo_velo.csv')
+```
+
+```{r}
+table(justsample1mira_and_sporo_velo@meta.data$stage)
+```
+
+```{r}
+justsample2 <- subset(x = mira_and_sporo_velo, subset = plex.x == "sample2")
+justsample2mira_and_sporo_velo <- merge(justsample2, y = sporo_veloCells, add.cell.ids = c("mirasample2_velo", "sporo_velo"), project = "mirasample2_sporo")
+
+```
+
+And now export of velocity analysis
+```{r}
+write.csv(x = justsample2mira_and_sporo_velo@meta.data, file = 'meta_filtered_fromOG_justsample2mira_and_sporo_velo.csv')
+write.csv(x = t(as.matrix(justsample2mira_and_sporo_velo@assays$sf@counts)), file = 'spliced_raw_filtered_fromOG_justsample2mira_and_sporo_velo.csv')
+write.csv(x = t(as.matrix(justsample2mira_and_sporo_velo@assays$uf@counts)), file = 'unspliced_raw_filtered_fromOG_justsample2mira_and_sporo_velo.csv')
+```
+
+```{r}
+table(justsample2mira_and_sporo_velo@meta.data$stage)
+```
+
+```{r}
+justsample3 <- subset(x = mira_and_sporo_velo, subset = plex.x == "sample3")
+justsample3mira_and_sporo_velo <- merge(justsample3, y = sporo_veloCells, add.cell.ids = c("mirasample3_velo", "sporo_velo"), project = "mirasample3_sporo")
+
+```
+
+And now export of velocity analysis
+```{r}
+write.csv(x = justsample3mira_and_sporo_velo@meta.data, file = 'meta_filtered_fromOG_justsample3mira_and_sporo_velo.csv')
+write.csv(x = t(as.matrix(justsample3mira_and_sporo_velo@assays$sf@counts)), file = 'spliced_raw_filtered_fromOG_justsample3mira_and_sporo_velo.csv')
+write.csv(x = t(as.matrix(justsample3mira_and_sporo_velo@assays$uf@counts)), file = 'unspliced_raw_filtered_fromOG_justsample3mira_and_sporo_velo.csv')
+```
+
+```{r}
+table(justsample3mira_and_sporo_velo@meta.data$stage)
+```
+
+
+```{r}
+justsample4 <- subset(x = mira_and_sporo_velo, subset = plex.x == "sample4")
+justsample4mira_and_sporo_velo <- merge(justsample4, y = sporo_veloCells, add.cell.ids = c("mirasample4_velo", "sporo_velo"), project = "mirasample4_sporo")
+
+```
+
+And now export of velocity analysis
+```{r}
+write.csv(x = justsample4mira_and_sporo_velo@meta.data, file = 'meta_filtered_fromOG_justsample4mira_and_sporo_velo.csv')
+write.csv(x = t(as.matrix(justsample4mira_and_sporo_velo@assays$sf@counts)), file = 'spliced_raw_filtered_fromOG_justsample4mira_and_sporo_velo.csv')
+write.csv(x = t(as.matrix(justsample4mira_and_sporo_velo@assays$uf@counts)), file = 'unspliced_raw_filtered_fromOG_justsample4mira_and_sporo_velo.csv')
+```
+
+```{r}
+table(justsample4mira_and_sporo_velo@meta.data$stage)
+```
+
+```{r}
+table(justsample1@meta.data$p)
+```
+
+```{r}
+justsample1 <- subset(x = mira_and_sporo_velo, plex.x == "sample1")
+
+justsample4 <- subset(x = mira_and_sporo_velo, subset = plex.x == "sample4")
+
+justsample41and4miravelo <- merge(justsample1, y = justsample4, add.cell.ids = c("mirasample1_velo", "mirasample4_velo"), project = "mirasample1and4")
+
+```
+
+And now export of velocity analysis
+```{r}
+write.csv(x = justsample41and4miravelo@meta.data, file = 'meta_filtered_fromOG_mirasample1and4_velo.csv')
+write.csv(x = t(as.matrix(justsample41and4miravelo@assays$sf@counts)), file = 'spliced_raw_filtered_fromOG_mirasample1and4.csv')
+write.csv(x = t(as.matrix(justsample41and4miravelo@assays$uf@counts)), file = 'unspliced_raw_filtered_fromOG_mirasample1and4.csv')
+```

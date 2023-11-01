@@ -1,0 +1,351 @@
+---
+title: "prep_sample1_fro_scvelo"
+author: "T Attenborough"
+date: "10/01/2023"
+output: html_document
+---
+
+The other packages are on CRAN.
+```{r, message=FALSE}
+library(remotes)
+library(Seurat)
+library(zeallot) # For %<-% that unpacks lists in the Python manner
+library(DropletUtils)
+library(tidyverse)
+library(GGally) # For ggpairs
+library(scales)
+library(plotly)
+library(BUSpaRse)
+library(SeuratWrappers)
+library(SeuratData)
+library(SeuratDisk)
+theme_set(theme_bw())
+
+remotes::install_github('satijalab/seurat-wrappers')
+```
+
+# Preprocessing
+## Remove empty droplets
+Now we have the spliced and unspliced matrices to be read into R:
+```{r}
+d <- "/Users/ta13/R_git/miracidia_v10_scvelo/sample1_kb/counts_filtered/"
+c(spliced, unspliced) %<-% read_velocity_output(spliced_dir = d,
+                                                spliced_name = "spliced",
+                                                unspliced_dir = d,
+                                                unspliced_name = "unspliced")
+```
+
+The `%<-%` from `zeallot` unpacks a list of 2 into 2 separate objects in the Python and Matlab manner. How many UMIs are from unspliced transcripts?
+
+
+```{r}
+sum(unspliced@x) / (sum(unspliced@x) + sum(spliced@x))
+```
+0.1066969
+
+```{r}
+dim(spliced)
+```
+
+9920 genes, 3503 cells
+
+```{r}
+dim(unspliced)
+```
+
+9920 genes,3504 cells
+
+
+Most barcodes only have 0 or 1 UMIs detected in unfiltered
+```{r}
+tot_count <- Matrix::colSums(spliced)
+summary(tot_count)
+```
+
+Median is 14327 UMIs
+
+
+A commonly used method to estimate the number of empty droplets is barcode ranking knee and inflection points, as those are often assumed to represent transition between two components of a distribution. While more sophisticated methods exist (e.g. see [`emptyDrops` in `DropletUtils`](https://www.bioconductor.org/packages/devel/bioc/vignettes/DropletUtils/inst/doc/DropletUtils.html#detecting-empty-droplets)), for simplicity, we will use the barcode ranking method here. However, whichever way we go, we don't have the ground truth. The spliced matrix is used for filtering, though both matrices have similar inflection points.
+```{r}
+bc_rank <- barcodeRanks(spliced)
+bc_uns <- barcodeRanks(unspliced)
+```
+
+
+Here the knee plot is transposed, because this is more generalizable to multi-modal data, such that those with not only RNA-seq but also abundance of cell surface markers. In that case, we can plot number of UMIs on the x axis, number of cell surface protein tags on the y axis, and barcode rank based on both UMI and protein tag counts on the z axis; it makes more sense to make barcode rank the dependent variable. See [this blog post by Lior Pachter](https://liorpachter.wordpress.com/2019/06/24/rotating-the-knee-plot-and-related-yoga/) for a more detailed explanation.
+
+```{r}
+#' Knee plot for filtering empty droplets
+#' 
+#' Visualizes the inflection point to filter empty droplets. This function plots 
+#' different datasets with a different color. Facets can be added after calling
+#' this function with `facet_*` functions.
+#' 
+#' @param bc_ranks A named list of output from `DropletUtil::barcodeRanks`.
+#' @return A ggplot2 object.
+#' @importFrom tibble tibble
+#' @importFrom purrr map map_dbl
+#' @importFrom dplyr distinct
+#' @importFrom ggplot2 geom_line geom_hline geom_vline scale_x_log10 scale_y_log10
+#' @importFrom tidyr unnest
+#' @export
+knee_plot <- function(bc_ranks) {
+  # purrr pluck shorthand doesn't work on S4Vector DataFrame
+  knee_plt <- tibble(rank = map(bc_ranks, ~ .x[["rank"]]), 
+                     total = map(bc_ranks, ~ .x[["total"]]),
+                     dataset = names(bc_ranks)) %>% 
+    unnest(cols = c(rank, total)) %>% 
+    distinct() %>% 
+    dplyr::filter(total > 0)
+  annot <- tibble(inflection = map_dbl(bc_ranks, ~ metadata(.x)[["inflection"]]),
+                  rank_cutoff = map_dbl(bc_ranks, 
+                                        ~ max(.x$rank[.x$total >
+                                                        metadata(.x)[["inflection"]]])),
+                  dataset = names(bc_ranks))
+  p <- ggplot(knee_plt, aes(rank, total, color = dataset)) +
+    geom_line() +
+    geom_hline(aes(yintercept = inflection, color = dataset), 
+               data = annot, linetype = 2) +
+    geom_vline(aes(xintercept = rank_cutoff, color = dataset),
+               data = annot, linetype = 2) +
+    scale_x_log10() +
+    scale_y_log10() +
+    labs(x = "Rank", y = "Total UMIs")
+  return(p)
+}
+```
+
+```{r knee}
+knee_plot(list(spliced = bc_rank, unspliced = bc_uns)) +
+  coord_flip()
+```
+
+
+Which inflection point should be used to remove what are supposed to be empty droplets? The one of the spliced matrix or the unspliced matrix? 
+
+Actually, spliced and unspliced counts are multimodal data, so why not make one of those promised 3D plots where the barcode rank depends on two variables? The rank (z axis) would now be the number cells with at least x spliced UMIs and y unspliced UMIs. How shall this be computed? The transposed knee plot (or rank-UMI plot) can be thought of as `(1 - ECDF(total_UMI))*n_cells`. In the ECDF of total UMI counts, the dependent variable is the proportion of cells with at most this number of distinct UMIs. So 1 minus that would mean the proportion of cells with at least this number of distinct UMIs. In the knee plot, the rank is the number of cells with at least this number of distinct UMIs. So dividing by the number of cells, we get `1 - ECDF(total_UMI)`. Would computing the 2D ECDF be more efficient than this naive approach? There is an R package that can compute bivariate ECDFs called `Emcdf`, but it uses so much memory that even our server can't handle. I failed to find implementations of bivariate ECDFs in other languages. There is an [algorithm based on range trees](https://dl.acm.org/citation.cfm?id=358850) that can find multivariate ECDF efficiently.
+
+Before obtaining a more efficient implementation, I used my naive approach that translates this concept into code very literally. Though I used Rcpp, it's really slow. The trick to make it faster is to only evaluate how many cells have at least x spliced and y unspliced counts at a smaller number of grid points of x and y.
+
+```{r engine='Rcpp'}
+//[[Rcpp::depends(RcppProgress)]]
+#include <progress.hpp>
+#include <progress_bar.hpp>
+#include <Rcpp.h>
+using namespace Rcpp;
+//[[Rcpp::export]]
+NumericMatrix bc_ranks2(NumericVector x, NumericVector y, 
+                        NumericVector x_grid, NumericVector y_grid) {
+  NumericMatrix out(x_grid.size(), y_grid.size());
+  Progress p(x_grid.size(), true);
+  for (int i = 0; i < x_grid.size(); i++) {
+    checkUserInterrupt();
+    for (int j = 0; j < y_grid.size(); j++) {
+      out(i,j) = sum((x_grid[i] <= x) & (y_grid[j] <= y));
+    }
+    p.increment();
+  }
+  return(out);
+}
+```
+
+As most barcodes have a small number of distinct UMIs detected, the grid should be denser for fewer counts. Making the grid in log space achieves this.
+```{r}
+# Can only plot barcodes with both spliced and unspliced counts
+bcs_inter <- intersect(colnames(spliced), colnames(unspliced))
+s <- colSums(spliced[,bcs_inter])
+u <- colSums(unspliced[,bcs_inter])
+# Grid points
+sr <- sort(unique(exp(round(log(s)*100)/100)))
+ur <- sort(unique(exp(round(log(u)*100)/100)))
+```
+
+
+```{r, eval=do_rank2}
+# Run naive approach
+bc2 <- bc_ranks2(s, u, sr, ur)
+```
+
+```{r, include=FALSE}
+saveRDS(bc2, "/Users/ta13/R_git/miracidia_v10_scvelo/sample1_kb/counts_filtered/bivar_knee.rds")
+```
+
+What would the "rank" look like?
+```{r}
+# can't turn color to lot scale unless log values are plotted
+z_use <- log10(bc2)
+z_use[is.infinite(z_use)] <- NA
+plot_ly(x = sr, y = ur, z = z_use) %>% add_surface() %>% 
+  layout(scene = list(xaxis = list(title = "Total spliced UMIs", type = "log"),
+                      yaxis = list(title = "Total unspliced UMIs", type = "log"),
+                      zaxis = list(title = "Rank (log10)")))
+```
+
+Looks like it worked. This looks pretty symmetric as the rank-UMI plots for the spliced and unspliced matrices are pretty similar. How can this be used to decide what may be empty droplets? This worths some more thoughts. The surface might also need to be be smoothed for automated thresholding, just like in `DropletUtils`'s inflection method. For now, for simplicity, the inflection point for the spliced matrix will be used provisionally.
+```{r}
+bcs_use <- colnames(spliced)[tot_count > metadata(bc_rank)$inflection]
+# Remove genes that aren't detected
+tot_genes <- Matrix::rowSums(spliced)
+genes_use <- rownames(spliced)[tot_genes > 0]
+sf <- spliced[genes_use, bcs_use]
+uf <- unspliced[genes_use, bcs_use]
+```
+
+```{r}
+dim(sf)
+```
+9088 genes and 3495 cells?
+
+```{r}
+rownames(sf) <- str_remove(rownames(sf), "\\.\\d+")
+rownames(uf) <- str_remove(rownames(uf), "\\.\\d+")
+```
+
+
+```{r, results="hide", warning=FALSE}
+seu <- CreateSeuratObject(sf, assay = "sf") %>% 
+  SCTransform(assay = "sf", new.assay.name = "spliced")
+```
+
+## QC
+Both the spliced and unspliced matrices are normalized and scaled with [`SCTransform`](https://www.biorxiv.org/content/10.1101/576827v2), which is an alternative to `NormalizeData`, `ScaleData`, and `FindVariableFeatures`.
+```{r, results="hide", warning=FALSE}
+seu[["uf"]] <- CreateAssayObject(uf)
+seu <- SCTransform(seu, assay = "uf", new.assay.name = "unspliced")
+```
+
+```{r}
+write.csv(x = seu@meta.data, file = 'sample1_kb/seu_meta_filt_miracidia_sample1.csv')
+write.csv(x = t(as.matrix(seu@assays$sf@counts)), file = 'sample1_kb/seu_spliced_raw_filt_miracidia_sample1.csv')
+write.csv(x = t(as.matrix(seu@assays$uf@counts)), file = 'sample1_kb/seu_unspliced_raw_filt_miracidia_sample1.csv')
+```
+
+```{r, fig.height=12, fig.width=6}
+cols_use <- c("nCount_sf", "nFeature_sf", "nCount_uf", "nFeature_uf")
+VlnPlot(seu, cols_use, pt.size = 0.1, ncol = 1, group.by = "orig.ident")
+ggsave("sample1_kb/mira1_meta.pdf", width = 25, height = 50, units = c('cm'))
+```
+
+
+How does number of UMI counts relate to number of genes detected? How does number of UMI counts in the spliced matrix relate to the number of gene detected in the unspliced matrix?
+
+```{r}
+# Helper functions for ggpairs
+log10_diagonal <- function(data, mapping, ...) {
+  ggally_densityDiag(data, mapping, ...) + scale_x_log10()
+}
+log10_points <- function(data, mapping, ...) {
+  ggally_points(data, mapping, ...) + scale_x_log10() + scale_y_log10()
+}
+```
+
+```{r pairs}
+ggpairs(seu@meta.data, columns = cols_use,
+        upper = list(continuous = "cor"),
+        diag = list(continuous = log10_diagonal),
+        lower = list(continuous = wrap(log10_points, alpha = 0.1, size=0.3)),
+        progress = FALSE)
+ggsave("sample1_kb/mira1_corr.pdf", width = 25, height = 25, units = c('cm'))
+
+```
+
+
+## Dimension reduction
+When visualizing RNA velocity on reduced dimensions, should the cell embeddings be from the spliced matrix or the unspliced matrix or the sum of both? In my opinion, it makes the most sense to plot RNA velocity over cell embeddings from the spliced matrix. The arrows in RNA velocity visualization stand for where the cell is predicted to be going in the near future. Where does the cell go from? The current state. And the current state is represented by the spliced matrix, while the unspliced matrix represents what is soon to come. Thus all the dimension reduction here will be computed from the spliced matrix.
+```{r elbow}
+DefaultAssay(seu) <- "spliced"
+seu <- RunPCA(seu, verbose = FALSE, npcs = 70)
+ElbowPlot(seu, ndims = 70)
+```
+
+```{r pca}
+# Need to use DimPlot due to weird workflowr problem with PCAPlot that calls seu[[wflow.build]]
+# and eats up memory. I suspect this is due to the sys.call() in 
+# Seurat:::SpecificDimPlot. 
+DimPlot(seu, reduction = "pca",
+        group.by = "orig.ident", pt.size = 0.5, label = TRUE, repel = TRUE) +
+  scale_color_brewer(type = "qual", palette = "Set2")
+```
+
+```{r tsne}
+seu <- RunTSNE(seu, dims = 1:50, verbose = FALSE)
+DimPlot(seu, reduction = "tsne",
+        group.by = "orig.ident", pt.size = 0.5, label = TRUE, repel = TRUE) +
+  scale_color_brewer(type = "qual", palette = "Set2")
+ggsave("sample1_kb/mira1_tsne.pdf", width = 15, height = 10, units = c('cm'))
+
+```
+
+```{r}
+seu <- RunUMAP(seu, dims = 1:50, umap.method = "uwot")
+```
+
+```{r umap}
+DimPlot(seu, reduction = "umap",
+        group.by = "orig.ident", pt.size = 0.5, label = TRUE, repel = TRUE) +
+  scale_color_brewer(type = "qual", palette = "Set2")
+ggsave("sample1_kb/mira1_umap.pdf", width = 15, height = 10, units = c('cm'))
+
+```
+
+```{r umap_clust}
+seu <- FindNeighbors(seu, verbose = FALSE) %>% 
+  FindClusters(resolution = 1, verbose = FALSE) # Louvain
+DimPlot(seu, pt.size = 0.5, reduction = "umap", label = TRUE)
+ggsave("sample1_kb/mira1_umap1.pdf", width = 15, height = 10, units = c('cm'))
+
+```
+
+Now I need to get the metadata from the original seurat analysis, and prepare a file 
+
+Import filtered sample 1
+
+```{r}
+run1.sample1.sorted.filt <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.v10.sample1.sorted.filt.rds")
+```
+
+Extract list with metadata
+```{r}
+run1.sample1.sorted.filt_metadata <- run1.sample1.sorted.filt@meta.data
+
+seu.sample1_metadata <- seu@meta.data
+```
+
+```{r}
+library(tidyverse)
+run1.sample1.sorted.filt_metadata <- tibble::rownames_to_column(run1.sample1.sorted.filt_metadata, "Cell.IDs")
+seu.sample1_metadata <- tibble::rownames_to_column(seu.sample1_metadata, "Cell.IDs")
+
+run1.sample1.sorted.filt_metadata$Cell.IDs <- strtrim(run1.sample1.sorted.filt_metadata$Cell.IDs, 16)
+```
+
+Combine metadat. I am going to do an inner join: only if cellID is in both metadata tables
+```{r}
+commonsample1 <- merge(run1.sample1.sorted.filt_metadata, seu.sample1_metadata, by = "Cell.IDs")
+```
+
+Here, I am going to make a new object with only cells in both seurat objects
+```{r}
+toRemove <-c(commonsample1$Cell.IDs)
+
+## filter them out:
+commCells_sample1 <- seu[,colnames(seu) %in% toRemove]
+
+length(colnames(commCells_sample1))
+
+commonsample1 <- commonsample1 %>%
+     remove_rownames() %>%
+     column_to_rownames(var = 'Cell.IDs')
+```
+
+Then i am going to update the metadata with the combined metadata
+```{r}
+commCells_sample1@meta.data <- commonsample1
+```
+
+And now export of velocity analysis
+```{r}
+write.csv(x = commCells_sample1@meta.data, file = 'sample1_kb/meta_filtered_fromOG_sample1_v10.csv')
+write.csv(x = t(as.matrix(commCells_sample1@assays$sf@counts)), file = 'sample1_kb/spliced_raw_filtered_fromOG_sample1_v10.csv')
+write.csv(x = t(as.matrix(commCells_sample1@assays$uf@counts)), file = 'sample1_kb/unspliced_raw_filtered_fromOG_sample1_v10.csv')
+```
