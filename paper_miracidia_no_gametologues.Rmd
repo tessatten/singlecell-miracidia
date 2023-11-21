@@ -1,0 +1,226 @@
+---
+title: "remove_the_gametologues"
+author: "T Attenborough"
+date: "21/10/2023"
+output: html_document
+---
+
+```{r}
+library(Seurat) #Seurat v4.0.2
+library(dplyr)
+library(patchwork)
+library(here)
+library(ggplot2)
+library(clustree)
+library(SingleCellExperiment)
+library(scater)
+library(DoubletFinder)
+library(zellkonverter)
+library(basilisk)
+#sessionInfo()
+```
+
+```{r}
+st=format(Sys.time(), "%Y-%m-%d") 
+st
+```
+
+First, I will import the R objects containing the filtered sorted and unsorted cells
+```{r}
+run1.sample1.sorted.filt <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.v10.sample1.sorted.filt.rds")
+
+run1.sample2.unsorted.filt <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.v10.sample2.unsorted.filt_52.rds")
+
+run1.sample3.unsorted.filt <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.v10.sample3.unsorted.filt_52.rds")
+
+run1.sample4.sorted.filt <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.v10.sample4.sorted.filt.rds")
+```
+
+```{r}
+run1.sorted.filt <- merge(run1.sample1.sorted.filt, y = run1.sample4.sorted.filt, add.cell.ids = c("sample1", "sample4"), project = "mira_sorted")
+
+run1.unsorted.filt <- merge(run1.sample2.unsorted.filt, y = run1.sample3.unsorted.filt, add.cell.ids = c("sample2", "sample3"), project = "mira_unsorted")
+```
+
+What happens if I remove the gametologue genes? Using the v9 list, does this need updating?
+```{r}
+all_gameto <- read.csv("/Users/ta13/R_git/filtered_v10_miracidia/v10_w_and_z_gametologues.csv", header = TRUE)
+all_gameto$gene <- gsub('\\_', '-', all_gameto$gene) #replace dashes with underscores
+```
+
+Make a list of all the genes in the data, not including the gametologue genes
+```{r}
+mygenesS <- rownames(x = run1.sorted.filt)
+head(mygenesS)
+mygenesS <- data.frame(mygenesS)
+colnames(mygenesS) <- "genes"
+8645
+
+mygenesU <- rownames(x = run1.unsorted.filt)
+head(mygenesU)
+mygenesU <- data.frame(mygenesU)
+colnames(mygenesU) <- "genes"
+8511
+
+allmygenes <- rbind(mygenesS, mygenesU)
+17156
+allmygenes <- allmygenes %>%
+  filter(duplicated(genes) == FALSE)
+8747
+mygenesNoGameto = subset(allmygenes, !(allmygenes$genes %in% all_gameto$gene))
+
+8747-8689
+```
+
+58 genes are detected and removed
+ there are 69 gametologs on this listbut ~10 have no expression at all in these data
+
+Side note: which ones are only in one or other dataset???
+```{r}
+mygenesS$type <- 'sorted'
+mygenesU$type <- 'unsorted'
+
+sum(mygenesS$genes %in% mygenesU$genes)
+sum(mygenesU$genes %in% mygenesS$genes)
+
+mygenesOnlySorted = subset(mygenesS, !(mygenesS$genes %in% mygenesU$gene))
+write.csv(x=mygenesOnlySorted, file="v10mygenesOnlySorted.csv")
+
+mygenesOnlyUnsorted = subset(mygenesU, !(mygenesU$genes %in% mygenesS$gene))
+write.csv(x=mygenesOnlyUnsorted, file="v10mygenesOnlyUnsorted.csv")
+```
+
+There are 236 genes only detected in unsorted, and 102 only detected in sorted
+
+
+```{r}
+DefaultAssay(run1.sorted.filt) <- 'RNA'
+non_gameto_sorted <- subset(run1.sorted.filt, features = mygenesNoGameto$genes)
+DefaultAssay(run1.sorted.filt) <- 'SCT'
+non_gameto_sorted <- subset(run1.sorted.filt, features = mygenesNoGameto$genes)
+```
+
+```{r}
+DefaultAssay(run1.unsorted.filt) <- 'RNA'
+non_gameto_unsorted <- subset(run1.unsorted.filt, features = mygenesNoGameto$genes)
+DefaultAssay(run1.unsorted.filt) <- 'SCT'
+non_gameto_unsorted <- subset(run1.unsorted.filt, features = mygenesNoGameto$genes)
+```
+
+```{r}
+non_gameto_sorted <- SCTransform(non_gameto_sorted, vars.to.regress = c("percent.mt", "plex"), verbose = FALSE, return.only.var.genes = FALSE)
+
+non_gameto_unsorted <- SCTransform(non_gameto_unsorted, vars.to.regress = c("percent.mt", "plex"), verbose = FALSE, return.only.var.genes = FALSE)
+```
+
+Find variable features
+```{r}
+type_list <- c(non_gameto_sorted, non_gameto_unsorted)
+# select features that are repeatedly variable across datasets for integration
+features <- SelectIntegrationFeatures(object.list = type_list, nfeatures = 3000)
+type_list <- PrepSCTIntegration(object.list = type_list, anchor.features = features)
+```
+
+
+Identify anchors and integrate
+```{r}
+run1noZW.anchors <- FindIntegrationAnchors(object.list = type_list, anchor.features = features, normalization.method = "SCT")
+# this command creates an 'integrated' data assay
+run1.no_gameto <- IntegrateData(anchorset = run1noZW.anchors, normalization.method = "SCT")
+```
+
+
+```{r}
+# specify that we will perform downstream analysis on the corrected data note that the
+# original unmodified data still resides in the 'RNA' assay
+DefaultAssay(run1.no_gameto) <- "integrated"
+
+run1.no_gameto <- RunPCA(run1.no_gameto, npcs = 100, verbose = FALSE)
+ElbowPlot(run1.no_gameto, ndims = 100)  #ranks PCs by percentage of variation. A clear dropoff is sometimes seen, though not really here.
+ggsave("run1.nogameto.v10.integrated.elbow.pdf")
+
+run1.no_gameto <- RunUMAP(run1.no_gameto, reduction = "pca", dims = 1:55)
+run1.no_gameto <- FindNeighbors(run1.no_gameto, reduction = "pca", dims = 1:55)
+run1.no_gameto <- FindClusters(run1.no_gameto, resolution = 0.5)
+
+# Select a range of resolutions
+resolution.range <- seq(from = 0, to = 1, by = 0.1)
+
+# Find clusters using a range of resolutions
+run1.no_gameto <- Seurat::FindClusters(object = run1.no_gameto, resolution = resolution.range)
+
+clustree(run1.no_gameto)
+ggsave("run1.no_gameto.clust_55PC_0_to_1_tree_SCT.pdf")
+```
+
+```{r}
+run1.no_gameto <- RunUMAP(run1.no_gameto, reduction = "pca", dims = 1:55)
+run1.no_gameto <- FindNeighbors(run1.no_gameto, reduction = "pca", dims = 1:55)
+p2 <- DimPlot(run1.no_gameto, reduction = "umap", group.by = "plex", repel = TRUE, shuffle = TRUE)
+p2
+ggsave("run1.no_gameto-clust-55-PC_integrate_52_plex.pdf", width = 25, height = 15, units = c('cm'))
+
+run1.no_gameto <- FindClusters(run1.no_gameto, resolution = 1)
+p2 <- DimPlot(run1.no_gameto, reduction = "umap", label = TRUE, repel = TRUE)
+p2
+ggsave("run1.no_gameto-clust-55-PC-1-res_integrate_52_clean.pdf")
+```
+
+```{r}
+run1.combined.v10 <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.combined.v10_integrated_55.rds")
+```
+
+```{r}
+DefaultAssay(run1.combined.v10) <- "integrated"
+run1.combined.v10 <- RenameIdents(object = run1.combined.v10, 
+                               "0" = "Muscle 1",
+                               "1" = "Stem C",
+                               "2" = "Stem D",
+                               "3" = "Stem F",
+                               "4" = "Stem A",
+                               "5" = "Stem B",
+                               "6" = "Neuron 1",
+                               "7" = "Muscle 2",
+                               "8" = "Neuron 2",
+                               "9" = "Parenchyma 1",
+                               "10" = "Stem E",
+                               "11" = "Parenchyma 2",
+                               "12" = "Protonephridia",
+                               "13" = "Tegument",
+                               "14" = "Neuron 3",
+                               "15" = "Neuron 5",
+                               "16" = "Stem G",
+                               "17" = "Neuron 4", 
+                              "18" = "Neuron 6")
+
+
+run1.combined.v10[["merge.ident"]] <- Idents(object = run1.combined.v10)
+run1.combined.v10[["may.ident"]] <- Idents(object = run1.combined.v10)
+
+DimPlot(run1.combined.v10, reduction = "umap", label=TRUE) #visulaises the UMAP
+p2 <- DimPlot(run1.combined.v10, reduction = "umap", label = TRUE, repel = TRUE)
+p2
+```
+
+```{r}
+run1.no_gameto <- AddMetaData(object = run1.no_gameto, metadata = run1.combined.v10$may.ident, col.name = 'may.ident')
+Idents(run1.no_gameto) <- run1.no_gameto$may.ident
+```
+
+```{r}
+p2 <- DimPlot(run1.no_gameto, reduction = "umap", label = TRUE, repel = TRUE)
+p2
+ggsave("run1clust_55PC_1res_integrate.run1.no_gameto_maylabels.pdf")
+ggsave("run1clust_55PC_1res_integrate.run1.no_gameto_maylabels_big.pdf", width = 35, height = 25, units = c('cm'))
+```
+
+Make a new color pallete for the 'fancy' umap
+```{r}
+new_pal <- c("#9E0059","#007aaa","#ffb703","#B3E9C7","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#c40c18", "#FFFD82", "#2191FB", "#690500", "#57467B", "#B57F50","#2C514C","#c4b7cb" ,"#FFCDB2" )
+scales::show_col(new_pal)
+plot1 <- DimPlot(run1.no_gameto, reduction = "umap", label = FALSE, repel = TRUE, label.box = FALSE) + NoLegend() +scale_color_manual(values = new_pal)
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75)
+
+ggsave("run1.v10.no_gameto_umap_fancyoldlabels_nov23.pdf", width = 20, height = 15, units = c('cm'))
+ggsave("run1.v10.no_gameto_umap_fancyoldlabels_nov23_small.pdf")
+```
