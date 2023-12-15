@@ -1,0 +1,252 @@
+---
+title: "figures_Nov23"
+author: "T Attenborough"
+date: "2023-11-01"
+output: html_document
+---
+
+```{r}
+library(Seurat) #Seurat v4.0.2
+library(dplyr)
+library(patchwork)
+library(here)
+library(ggplot2)
+library(clustree)
+library(SingleCellExperiment)
+library(scater)
+library(DoubletFinder)
+library(zellkonverter)
+library(basilisk)
+library(ggpubr)
+library(RColorBrewer)
+#sessionInfo()
+```
+
+
+
+```{r}
+run1.combined.v10 <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.combined.v10_integrated_55.rds")
+```
+
+```{r}
+st=format(Sys.time(), "%Y-%m-%d") 
+st
+```
+
+Generating some of the images for publication
+
+First, import the R obj
+
+```{r}
+DefaultAssay(run1.combined.v10) <- "integrated"
+run1.combined.v10 <- RenameIdents(object = run1.combined.v10, 
+                               "0" = "Muscle 1",
+                               "1" = "Stem C",
+                               "2" = "Stem D",
+                               "3" = "Stem F",
+                               "4" = "Stem A",
+                               "5" = "Stem B",
+                               "6" = "Neuron 1",
+                               "7" = "Muscle 2",
+                               "8" = "Neuron 2",
+                               "9" = "Parenchyma 1",
+                               "10" = "Stem E",
+                               "11" = "Parenchyma 2",
+                               "12" = "Protonephridia",
+                               "13" = "Tegument",
+                               "14" = "Neuron 3",
+                               "15" = "Neuron 5",
+                               "16" = "Stem G",
+                               "17" = "Neuron 4", 
+                              "18" = "Neuron 6")
+
+
+run1.combined.v10[["merge.ident"]] <- Idents(object = run1.combined.v10)
+run1.combined.v10[["may.ident"]] <- Idents(object = run1.combined.v10)
+
+DimPlot(run1.combined.v10, reduction = "umap", label=TRUE) #visulaises the UMAP
+p2 <- DimPlot(run1.combined.v10, reduction = "umap", label = TRUE, repel = TRUE)
+p2
+```
+Import annotation information
+```{r}
+v10_genelist <- read.csv("/Users/ta13/R_git/cerc_som_v10/v10_genes_with_descriptions_2023-04-17.csv", stringsAsFactors = FALSE, header = TRUE) #import the marker data from cercule papaer
+v10_genelist$X <- NULL 
+```
+
+Make a new color pallete for the 'fancy' umap
+```{r}
+#new_pal <- c("#9E0059","#007aaa","#ffb703","#c40c18","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#B3E9C7", "#FFFD82", "#2191FB", "#690500", "#57467B", "#B57F50","#2C514C","#c4b7cb" ,"#69A297" )
+
+#new_pal <- c("#9E0059","#007aaa","#ffb703","#B3E9C7","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#c40c18", "#FFFD82", "#2191FB", "#690500", "#57467B", "#B57F50","#2C514C","#c4b7cb" ,"#69A297" )
+
+new_pal <- c("#9E0059","#007aaa","#ffb703","#B3E9C7","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#c40c18", "#FFFD82", "#2191FB", "#690500", "#57467B", "#B57F50","#2C514C","#c4b7cb" ,"#FFCDB2" )
+scales::show_col(new_pal)
+plot1 <- DimPlot(run1.combined.v10, reduction = "umap", label = FALSE, repel = TRUE, label.box = FALSE) + NoLegend() +scale_color_manual(values = new_pal)
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75)
+
+ggsave(paste("figs_nov23/run1.combined.v10_umap_oldfancylabels-",st, ".pdf", sep = ""), width = 25, height = 20, units = c('cm'))
+ggsave(paste("figs_nov23/run1.combined.v10_umap_oldfancylabels-small-",st, ".pdf", sep = ""))
+```
+
+```{r}
+#new_pal <- c("#9E0059","#007aaa","#ffb703","#BBC8CA","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#c40c18", "#FFFD82", "#2191FB", "#690500", "#57467B", "#B57F50","#2C514C","#C1AAC0" ,"#FFCDB2" )
+scales::show_col(new_pal)
+plot1 <- DimPlot(run1.combined.v10, reduction = "umap", label = FALSE, repel = TRUE, label.box = FALSE) + NoLegend() +scale_color_manual(values = new_pal)
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75)
+
+ggsave(paste("figs_nov23/run1.combined.v10_umap_fancylabels-small-grey",st, ".pdf", sep = ""))
+```
+
+PLot by sorted/unsorted
+```{r}
+plot1 <- DimPlot(run1.combined.v10, reduction = "umap", label = FALSE, repel = TRUE, label.box = FALSE, split.by = "type") + NoLegend() +scale_color_manual(values = new_pal)
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75,max.overlaps = Inf)
+
+ggsave(paste("figs_nov23/run1.combined.v10_umap_fancylabels-sortsmallish-",st, ".pdf", sep = ""), width = 28, height = 12, units = c('cm'))
+```
+
+Import the marker gene list
+```{r}
+marker_gene_list <- read.csv("/Users/ta13/R_git/filtered_v10_miracidia/markerz_roc_with_lbls_run1.combined.v10_jan23.csv", stringsAsFactors = FALSE, header = TRUE) #import the marker data from somule papaer
+marker_gene_list_v9annotated <- read.csv("/Users/ta13/R_git/filtered_v10_miracidia/markerz_roc_with_lbls_run1.combined.v10_annotate_2023-01-23.csv", stringsAsFactors = FALSE, header = TRUE) #import the marker data from somule papae
+```
+
+Import annotation information
+```{r}
+v10_genelist <- read.csv("/Users/ta13/R_git/cerc_som_v10/v10_genes_with_descriptions_2023-04-17.csv", stringsAsFactors = FALSE, header = TRUE) #import the marker data from cercule papaer
+v10_genelist$X <- NULL 
+```
+
+
+```{r}
+DefaultAssay(run1.combined.v10) <- "RNA"
+
+coexpression.plot <-FeaturePlot(run1.combined.v10, features = c("Smp-180030", "Smp-104210"), blend = TRUE)
+coexpression.plot
+ggsave(paste("figs_nov23/run1.combined.v10-coexpressed-Smp-180030-Smp-104210-",st, ".pdf", sep = ""), width = 45, height = 25, units = c('cm'))
+```
+
+```{r}
+mira.neuron3 <- subset(run1.combined.v10, idents = 'Neuron 3')
+
+coexpression.plot <-FeaturePlot(mira.neuron3, features = c("Smp-180030", "Smp-104210"), blend = TRUE)
+coexpression.plot
+ggsave(paste("figs_nov23/run1.combined.v10.neuron3-coexpressed-Smp-180030-Smp-104210-",st, ".pdf", sep = ""), width = 45, height = 25, units = c('cm'))
+```
+
+```{r}
+# Problem: Find cells coexpressing a certain gene
+
+# Solution:
+# Here we assume the two genes are INS and PDX1, I want to know the percentage of Beta cells that are INS+/PDX1+
+# Subset your cluster of interest for as an example I am subsetting a cluster called 'beta'
+# The following creates a seurat object of only the cluster 'beta'
+mira.neuron3 <- subset(run1.combined.v10, idents = c("Neuron 3"))
+
+# Point your new cluster towards the object you will use to perform calculations.
+# I like doing this because otherwise, you have to write lengths of redundant code
+# Also I'm like really lazy with code
+ThisWayIsTotallyMentalButItWorks <- mira.neuron3
+GOI1 <- 'Smp-180030' #you will have to name your first gene here, im choosing PDX1 as an example
+GOI2 <- 'Smp-104210' #you will have to name your second gene here, im choosing INS as an example
+GOI1.cutoff <- 1 #Assumption: gene count cutoff is 1, assuming atleast 1 count is REAL
+GOI2.cutoff <- 1 #Assumption: gene count cutoff is 1, assuming atleast 1 count is REAL
+
+# Time to party
+GOI1.cells <- length(which(FetchData(ThisWayIsTotallyMentalButItWorks, vars = GOI1) > GOI1.cutoff))
+GOI2.cells <- length(which(FetchData(ThisWayIsTotallyMentalButItWorks, vars = GOI2) > GOI2.cutoff))
+GOI1_GOI2.cells <- length(which(FetchData(ThisWayIsTotallyMentalButItWorks, vars = GOI2) > GOI2.cutoff & FetchData(ThisWayIsTotallyMentalButItWorks, vars = GOI1) > GOI1.cutoff))
+all.cells.incluster <- table(ThisWayIsTotallyMentalButItWorks@active.ident)
+GOI1.cells/all.cells.incluster*100 # Percentage of cells in Beta that express GOI1
+GOI2.cells/all.cells.incluster*100 #Percentage of cells in Beta that express GOI2
+GOI1_GOI2.cells/all.cells.incluster*100 #Percentage of cells in Beta that co-express GOI1 + GOI2
+```
+
+```{r}
+FeaturePlot(run1.combined.v10, features = "Smp-041540")
+ggsave(paste("figs_nov23/run1.combined.v10-Smp-041540-",st, ".pdf", sep = ""), width = 25, height = 15, units = c('cm'))
+
+```
+Plot the percentages of W and Z
+ID the Z genes and combine with W
+```{r}
+all_Z <- read.csv("/Users/ta13/R_git/filtered_v10_miracidia/v10edit_ZSR_gff_only_Zspecifictogether_edit.csv", sep=c(','), header = FALSE)
+
+all_Z <- subset(all_Z, V1 == 'gene')
+just_Z <- data.frame(do.call('rbind', strsplit(as.character(all_Z$V2),';',fixed=TRUE)))
+just_Z <- data.frame(do.call('rbind', strsplit(as.character(just_Z$X1),'=',fixed=TRUE)))
+
+just_Z$X2 <- gsub('\\_', '-', just_Z$X2) #replace dashes with underscores
+```
+
+ID the W genes
+```{r}
+all_W <- read.csv("/Users/ta13/R_git/filtered_v10_miracidia/v10edit_WSR_gff_trim.csv", sep=c(','), header = FALSE)
+all_W <- subset(all_W, V1 == 'gene')
+just_W <- data.frame(do.call('rbind', strsplit(as.character(all_W$V2),';',fixed=TRUE)))
+just_W <- data.frame(do.call('rbind', strsplit(as.character(just_W$X1),'=',fixed=TRUE)))
+
+just_W$X2 <- gsub('\\_', '-', just_W$X2) #replace dashes with underscores
+
+```
+
+Now that we have the chromosome information, we can calculate per cell the proportion of reads that comes from chromosome W?
+```{r}
+DefaultAssay(run1.combined.v10) <- "RNA"
+
+chrW.gene = just_W$X2
+chrW.gene <- just_W[just_W$X2 %in% rownames(run1.combined.v10),]
+
+run1.combined.v10$pct_chrW = colSums(run1.combined.v10@assays$RNA@counts[chrW.gene$X2, ])/colSums(run1.combined.v10@assays$RNA@counts)
+
+PercentageFeatureSet(run1.combined.v10,features=chrW.gene$X2) -> run1.combined.v10$percfeatset_chrW
+```
+
+```{r}
+
+DefaultAssay(run1.combined.v10) <- "RNA"
+
+chrZ.gene = just_Z$X2
+chrZ.gene <- just_Z[just_Z$X2 %in% rownames(run1.combined.v10),]
+
+run1.combined.v10$pct_chrZ = colSums(run1.combined.v10@assays$RNA@counts[chrZ.gene$X2, ])/colSums(run1.combined.v10@assays$RNA@counts)
+
+PercentageFeatureSet(run1.combined.v10,features=chrZ.gene$X2) -> run1.combined.v10$percfeatset_chrZ
+```
+
+```{r}
+W.plot <- VlnPlot(run1.combined.v10, features = c("percfeatset_chrW"), cols = new_pal) +
+    ggplot2::geom_hline(yintercept = 0.2, color = "blue")+
+  ggtitle("Percentage mapping to WSR")
+
+W.plot
+ggsave("figs_nov23/run1.combined.v10_55PC_1res_percW_vln_integrate_0.2perc_newpal.pdf", width = 25, height = 15, units = c('cm'))
+```
+
+
+```{r}
+deg_genelist <- read.csv(("/Users/ta13/R_git/filtered_v10_miracidia/top25stemDEGs.csv"), stringsAsFactors = FALSE, header = TRUE) #import the marker data from somule papaer
+deg_genelist <- deg_genelist %>% left_join(v10_genelist, by = c("gene" = "Gene.stable.ID")) #check the top 5 marker genes are also in the somule paper
+deg_genelist$nice_lbl <- paste(deg_genelist$gene, deg_genelist$descriptions, sep= " - ")
+deg_genelist$gene <- gsub('\\_', '-', deg_genelist$gene) #replace dashes in geneid with underscores
+```
+
+```{r}
+stems <- subset(x = run1.combined.v10, idents = c("Stem A", "Stem B", "Stem C", "Stem D"))
+DefaultAssay(stems) <- "RNA"
+stems <- ScaleData(stems, verbose = FALSE, vars.to.regress = c("percent.mt", "plex"))
+
+```
+
+```{r}
+DoHeatmap(object = stems, features = deg_genelist$gene, group.colors= c("#007aaa", "#ffb703", "#fb8500", "#7851a9"), raster=FALSE)
+ggsave("figs_nov23/run1.combined.v10.DEG_Nov23_RNA.pdf", width = 25, height = 20, units = c('cm'))
+```
+```{r}
+DefaultAssay(stems) <- "SCT"
+DoHeatmap(object = stems, features = deg_genelist$gene, group.colors= c("#007aaa", "#ffb703", "#fb8500", "#7851a9"), raster=FALSE)
+ggsave("figs_nov23/run1.combined.v10.DEG_Nov23_SCT.pdf", width = 25, height = 20, units = c('cm'))
+```
+
+

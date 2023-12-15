@@ -394,6 +394,7 @@ str(topGO_summary_all)
 ```{r}
 
 new_pal <- c("#9E0059","#007aaa","#ffb703","#c40c18","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#B3E9C7", "#FFFD82", "#2191FB", "#690500", "#57467B", "#B57F50","#2C514C","#c4b7cb" ,"#69A297" )
+new_pal <- c("#9E0059","#007aaa","#ffb703","#B3E9C7","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#c40c18", "#FFFD82", "#2191FB", "#690500", "#57467B", "#B57F50","#2C514C","#c4b7cb" ,"#FFCDB2" )
 ```
 
 ```{r}
@@ -415,11 +416,159 @@ topGO_summary_sporos_long_2genes <- topGO_summary_all %>%
 ```
 ]
 ```{r}
-ggplot(data = topGO_summary_all, aes(x = fct_reorder2(Term, negativelog10FDR, Cell.type), y = negativelog10FDR, fill = Cell.type)) + geom_bar(stat="identity",position = "dodge")+ 
+ggplot(data = topGO_summary_sporos_long_2genes, aes(x = fct_reorder2(Term, negativelog10FDR, Cell.type), y = negativelog10FDR, fill = Cell.type)) + geom_bar(stat="identity",position = "dodge")+ 
   scale_colour_identity()+
        coord_flip()+theme_bw()+scale_fill_manual(values = new_pal)+ labs(fill = " ", x = " ", y = "-log10FDR")+theme(axis.text.x=element_text(size=15),axis.text.y=element_text(size=12), axis.title.x = element_text(size = 18),legend.key.size = unit(0.8, 'cm'), legend.text = element_text(size=10))
 ggsave("v10_GO_genelists/topGO_all_filtv10_plot1_longlist_twogenes.pdf", width = 20, height = 50, units = c('cm'))
 ```
 
+Now, plot each tissue separately
+```{r}
+miracidia_stem <- topGO_summary_all[topGO_summary_all$Cell.type=='Stem A' | topGO_summary_all$Cell.type=='Stem B' | topGO_summary_all$Cell.type=='Stem C' | topGO_summary_all$Cell.type=='Stem D' | topGO_summary_all$Cell.type=='Stem E' | topGO_summary_all$Cell.type=='Stem G' ,]
+miracidia_stem
+miracidia_stem <- miracidia_stem %>%
+  filter(str_detect(genes, ","))
+```
 
+```{r}
+new_pal <- c("#fb8500","#7851a9","#007aaa","#ffb703","#57467B", "#c40c18","#2C514C")
+new_pal <- c("#fb8500","#7851a9","#007aaa","#ffb703","#c40c18","#2C514C")
+
+p_stem <- ggplot(data = miracidia_stem, aes(x = fct_reorder2(Term, negativelog10FDR, Cell.type), y = negativelog10FDR, fill = Cell.type)) + geom_bar(stat="identity",position = "dodge")+ 
+  scale_colour_identity()+
+       coord_flip()+theme_bw()+scale_fill_manual(values = new_pal)+ labs(fill = " ", x = " ", y = "-log10FDR")+theme(axis.text.x=element_text(size=15),axis.text.y=element_text(size=12), axis.title.x = element_text(size = 18),legend.key.size = unit(0.8, 'cm'), legend.text = element_text(size=10))
+p_stem
+ggsave("v10_GO_genelists/topGO_miracidia_stem_filtv10_plot1_longlist_twogenes.pdf", width = 20, height = 30, units = c('cm'))
+```
+Now, plot each tissue separately
+```{r}
+new_pal <- c("#FB6376", "#FFFD82")
+miracidia_parenchyma <- topGO_summary_all[topGO_summary_all$Cell.type=='Parenchyma 1' | topGO_summary_all$Cell.type=='Parenchyma 2' ,]
+miracidia_parenchyma
+miracidia_parenchyma <- miracidia_parenchyma %>%
+  filter(str_detect(genes, ","))
+
+p_parenchyma <- ggplot(data = miracidia_parenchyma, aes(x = fct_reorder2(Term, negativelog10FDR, Cell.type), y = negativelog10FDR, fill = Cell.type)) + geom_bar(stat="identity",position = "dodge")+ 
+  scale_colour_identity()+
+       coord_flip()+theme_bw()+scale_fill_manual(values = new_pal)+ labs(fill = " ", x = " ", y = "-log10FDR")+theme(axis.text.x=element_text(size=15),axis.text.y=element_text(size=12), axis.title.x = element_text(size = 18),legend.key.size = unit(0.8, 'cm'), legend.text = element_text(size=10))
+p_parenchyma
+ggsave("v10_GO_genelists/topGO_miracidia_parenchyma_filtv10_plot1_longlist_twogenes.pdf", width = 20, height = 20, units = c('cm'))
+```
+
+```{r}
+new_pal <- c("#9E0059","#8ACB88")
+miracidia_Muscle <- topGO_summary_all[topGO_summary_all$Cell.type=='Muscle 1' | topGO_summary_all$Cell.type=='Muscle 2' ,]
+miracidia_Muscle
+miracidia_Muscle <- miracidia_Muscle %>%
+  filter(str_detect(genes, ","))
+
+p_muscle <- ggplot(data = miracidia_Muscle, aes(x = fct_reorder2(Term, negativelog10FDR, Cell.type), y = negativelog10FDR, fill = Cell.type)) + geom_bar(stat="identity",position = "dodge")+ 
+  scale_colour_identity()+
+       coord_flip()+theme_bw()+scale_fill_manual(values = new_pal)+ labs(fill = " ", x = " ", y = "-log10FDR")+theme(axis.text.x=element_text(size=15),axis.text.y=element_text(size=12), axis.title.x = element_text(size = 18),legend.key.size = unit(0.8, 'cm'), legend.text = element_text(size=10))
+p_muscle
+ggsave("v10_GO_genelists/topGO_miracidia_muscle_filtv10_plot1_longlist_twogenes.pdf", width = 20, height = 10, units = c('cm'))
+```
+
+```{r}
+new_pal <- c("#00325b", "#107E7D", "#B3E9C7", "#B57F50", "#69A297")
+new_pal <- c( "#107E7D", "#57467B", "#FFCDB2")
+
+miracidia_neuron <- topGO_summary_all[topGO_summary_all$Cell.type=='Neuron 1' | topGO_summary_all$Cell.type=='Neuron 2' | topGO_summary_all$Cell.type=='Neuron 3' | topGO_summary_all$Cell.type=='Neuron 5' | topGO_summary_all$Cell.type=='Neuron 6' ,]
+miracidia_neuron <- miracidia_neuron %>%
+  filter(str_detect(genes, ","))
+
+p_neuron <- ggplot(data = miracidia_neuron, aes(x = fct_reorder2(Term, negativelog10FDR, Cell.type), y = negativelog10FDR, fill = Cell.type)) + geom_bar(stat="identity",position = "dodge")+ 
+  scale_colour_identity()+
+       coord_flip()+theme_bw()+scale_fill_manual(values = new_pal)+ labs(fill = " ", x = " ", y = "-log10FDR")+theme(axis.text.x=element_text(size=15),axis.text.y=element_text(size=12), axis.title.x = element_text(size = 18),legend.key.size = unit(0.8, 'cm'), legend.text = element_text(size=10))
+p_neuron
+ggsave("v10_GO_genelists/topGO_miracidia_neuron_filtv10_plot1_longlist_twogenes.pdf", width = 20, height = 10, units = c('cm'))
+```
+
+```{r}
+new_pal <- c("#690500")
+miracidia_tegument <- topGO_summary_all[topGO_summary_all$Cell.type=='Tegument' ,]
+miracidia_tegument
+miracidia_tegument <- miracidia_tegument %>%
+  filter(str_detect(genes, ","))
+
+p_tegument <- ggplot(data = miracidia_tegument, aes(x = fct_reorder2(Term, negativelog10FDR, Cell.type), y = negativelog10FDR, fill = Cell.type)) + geom_bar(stat="identity",position = "dodge")+ 
+  scale_colour_identity()+
+       coord_flip()+theme_bw()+scale_fill_manual(values = new_pal)+ labs(fill = " ", x = " ", y = "-log10FDR")+theme(axis.text.x=element_text(size=15),axis.text.y=element_text(size=12), axis.title.x = element_text(size = 18),legend.key.size = unit(0.8, 'cm'), legend.text = element_text(size=10))
+p_tegument
+ggsave("v10_GO_genelists/topGO_miracidia_tegument_filtv10_plot1_longlist_twogenes.pdf", width = 20, height = 10, units = c('cm'))
+```
+
+```{r}
+new_pal <- c("#2191FB")
+miracidia_protonephridia <- topGO_summary_all[topGO_summary_all$Cell.type=='Protonephridia' ,]
+miracidia_protonephridia
+miracidia_protonephridia <- miracidia_protonephridia %>%
+  filter(str_detect(genes, ","))
+
+p_protonephridia <- ggplot(data = miracidia_protonephridia, aes(x = fct_reorder2(Term, negativelog10FDR, Cell.type), y = negativelog10FDR, fill = Cell.type)) + geom_bar(stat="identity",position = "dodge")+ 
+  scale_colour_identity()+
+       coord_flip()+theme_bw()+scale_fill_manual(values = new_pal)+ labs(fill = " ", x = " ", y = "-log10FDR")+theme(axis.text.x=element_text(size=15),axis.text.y=element_text(size=12), axis.title.x = element_text(size = 18),legend.key.size = unit(0.8, 'cm'), legend.text = element_text(size=10))
+p_protonephridia
+ggsave("v10_GO_genelists/topGO_miracidia_protonephridia_filtv10_plot1_longlist_twogenes.pdf", width = 20, height = 5, units = c('cm'))
+```
+
+```{r}
+new_pal <- c("#c4b7cb")
+miracidia_ciliary <- topGO_summary_all[topGO_summary_all$Cell.type=='Neuron 4' ,]
+miracidia_ciliary
+miracidia_ciliary <- miracidia_ciliary %>%
+  filter(str_detect(genes, ","))
+
+p_ciliary <- ggplot(data = miracidia_ciliary, aes(x = fct_reorder2(Term, negativelog10FDR, Cell.type), y = negativelog10FDR, fill = Cell.type)) + geom_bar(stat="identity",position = "dodge")+ 
+  scale_colour_identity()+
+       coord_flip()+theme_bw()+scale_fill_manual(values = new_pal)+ labs(fill = " ", x = " ", y = "-log10FDR")+theme(axis.text.x=element_text(size=15),axis.text.y=element_text(size=12), axis.title.x = element_text(size = 18),legend.key.size = unit(0.8, 'cm'), legend.text = element_text(size=10))
+p_ciliary
+ggsave("v10_GO_genelists/topGO_miracidia_ciliary_filtv10_plot1_longlist_twogenes.pdf", width = 20, height = 10, units = c('cm'))
+```
+
+```{r}
+new_pal <- c("#c4b7cb","#007aaa","#ffb703","#c40c18","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#57467B", "#FFFD82", "#2191FB", "#690500", "#B3E9C7", "#B57F50","#2C514C","#754043" ,"#69A297" )
+```
+
+```{r}
+allplots <- (p_stem | p_stem)+ plot_layout(guides = "collect")
+  
+allplots <-(p_parenchyma | p_muscle | p_tegument) /
+  (p_ciliary | p_neuron | p_protonephridia) /
+      p_stem + plot_layout(guides = "collect")
+allplots
+ggsave("v10_GO_genelists/topGO_miracidia_patchwork_filtv10_plot1_longlist_twogenes_newpal.pdf", width = 45, height = 40, units = c('cm'))
+```
+
+```{r}
+Rscript TopGO_mira_v10.R stem1_deg_Markers_justgenes_2023-03-24_v10.txt BP
+Rscript TopGO_mira_v10.R stem1_deg_Markers_justgenes_2023-03-24_v10.txt MF
+
+Rscript TopGO_mira_v10.R stem2_deg_Markers_justgenes_2023-03-24_v10.txt BP
+Rscript TopGO_mira_v10.R stem2_deg_Markers_justgenes_2023-03-24_v10.txt MF
+```
+
+Import the summary file
+```{r}
+topGO_summary_stem <- read.csv("/Users/ta13/R_git/filtered_v10_miracidia/v10_GO_genelists/topGO_summary_stem1stem2_onv10_filtered_v10.csv", stringsAsFactors = FALSE, header = TRUE) #import the marker data from somule papaer
+```
+
+```{r}
+topGO_summary_stem<- topGO_summary_stem[seq(dim(topGO_summary_stem)[1],1),]
+```
+
+```{r}
+str(topGO_summary_stem)
+
+topGO_summary_stem$negativelog1
+unique(topGO_summary_stem$Colour)
+new_pal <- c("#ffb703","#007aaa")
+
+
+#fct_reorder(topGO_summary_sporos$Term, topGO_summary_sporos$Cell.type, min)
+ggplot(data = topGO_summary_stem, aes(x = fct_reorder2(Term, negativelog10FDR, Cell.type), y = negativelog10FDR, fill = Cell.type)) + geom_bar(stat="identity",position = "dodge") + 
+  scale_colour_identity()+
+       coord_flip()+theme_bw()+scale_fill_manual(values = new_pal)+ labs(fill = " ", x = " ", y = "-log10FDR")+theme(axis.text.x=element_text(size=15),axis.text.y=element_text(size=12), axis.title.x = element_text(size = 18),legend.key.size = unit(0.8, 'cm'), legend.text = element_text(size=10))
+ggsave("v10_GO_genelists/topGO_stem_allv10.pdf", width = 20, height = 35, units = c('cm'))
+```
 
