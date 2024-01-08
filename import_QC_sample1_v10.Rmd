@@ -22,23 +22,6 @@ library(DoubletFinder)
 
 First I am going to look at sample 1 from MIRACIDIA run 1
 
-```{r}
-run1.v10.sample1.sorted.filt <- readRDS(file = "/Users/ta13/R_tutorials/neat_miracidia/run1.v10.sample1.sorted.filt.rds")
-
-write.csv(Cells(run1.v10.sample1.sorted.filt), file = "run1.v10.sample1.sorted.filt_cellID_obs.csv", row.names = FALSE)
-
-write.csv(Embeddings(run1.v10.sample1.sorted.filt, reduction = "umap"), file = "run1.v10.sample1.sorted.filt_cell_embeddings.csv")
-
-write.csv(run1.v10.sample1.sorted.filt@meta.data$SCT_snn_res.0.8, file = "run1.v10.sample1.sorted.filt_clusters.csv")
-```
-
-
-```{r}
-splice <- read.csv("/Users/ta13/R_git/mira_phate/seu_meta.csv", stringsAsFactors = FALSE, header = TRUE) #import the marker data from somule papaer
-
-```
-
-
 Import all run1.v10 sample1 (sorted)
 ```{r}
 run1.v10.sample1.mira.data <- Read10X(here(c('/Users/ta13/Miracidia/v10_filtered/Sample1/filtered_feature_bc_matrix/')))
@@ -147,6 +130,7 @@ run1.v10.sample1.sorted_metadata %>%
   	ggtitle("Log10 of gene count per cell")
 
 ```
+
 ```{r}
 # Visualize the correlation between genes detected and number of UMIs and determine whether strong presence of cells with low numbers of genes/UMIs
 run1.v10.sample1.sorted_metadata %>% 
@@ -210,12 +194,7 @@ run1.v10.sample1.sorted_metadata %>%
 
 Filter out cells with more than 5% mitochondrial gene expression and less than 500 UMIs, 
 
-Should I also consider:
-Lowering/changing the mito %? 
-putting a ceiling on number of genes/UMIs?
-and complexity less than 0.8?
-
-Min features is 300, set earlier when importing the seurat object
+Min features is 200, set earlier when importing the seurat object
 ```{r}
 run1.v10.sample1.sorted <- subset(run1.v10.sample1.sorted, subset = percent.mt < 5)
 
@@ -457,9 +436,6 @@ table(run1.v10.sample1.sorted$DF.classifications_0.25_0.3_299) #shows number of 
 
 DimPlot(run1.v10.sample1.sorted, reduction = "umap", group.by = "DF.classifications_0.25_0.3_299") #visulaises the UMAP
 ggsave("run1.v10.sample1.sorted_doublets.pdf")
-
-
-
 ```
 
 We should expect that two cells have more detected genes than a single cell, lets check if our predicted doublets also have more detected genes in general.
@@ -467,7 +443,6 @@ We should expect that two cells have more detected genes than a single cell, let
 VlnPlot(run1.v10.sample1.sorted, features = "nFeature_RNA", group.by = 'DF.classifications_0.25_0.3_299', pt.size = 0.1)
 
 FeatureScatter(run1.v10.sample1.sorted, "nFeature_RNA", "nCount_RNA", group.by = "DF.classifications_0.25_0.3_299", pt.size = 0.5)
-
 ```
 
 Now, lets remove all predicted doublets from our data. I also so want to save the doublets, to see what's in them later, just in case.
@@ -489,7 +464,6 @@ Leaves 3852 cells and 8621 genes
 ```{r}
 #saveRDS(run1.v10.sample1.sorted.filt, file = "run1.v10.sample1.sorted_afterDF.rds") #saves this version of the dataset
 saveRDS(run1.v10.sample1.sorted.doublets, file = "run1.v10.sample1.sorted_doublets.rds") #saves this version of the dataset
-
 ```
 
 Now, rerun the visual QC.
@@ -603,7 +577,6 @@ run1.v10.sample1.sorted.filt_metadata %>%
   geom_density(alpha = 0.2) +
   theme_classic() +
   geom_vline(xintercept = 0.8)
-
 ```
 
 Use SingleCellExperiment to look at the top genes, if that will now work.
@@ -675,7 +648,7 @@ ggsave("run1.v10.sample1.sorted.filt_40PC_0.8res_genes_SCT.pdf")
 
 Now, import the final somule data object from Carmen
 ```{r}
-somules <- readRDS(file = "/Users/ta13/R_tutorials/sporocysts/V9_no_CDSUTR_Tess_Carmen 2/data/Seurat_Object/Final_objects/somules.RDS")
+somules <- readRDS(file = "/Users/ta13/data/Seurat_Object/Final_objects/somules.RDS")
 ```
 
 Use somule data to initially project annotations onto miracidia run1.v10 sorted data
@@ -717,14 +690,6 @@ run1.v10.sample1.sorted.filt@misc$allmarkersSCT <- run1.v10.sample1.sorted.filt.
 Here's lets save the filtered object for future use
 ```{r}
 saveRDS(run1.v10.sample1.sorted.filt, file = "run1.v10.sample1.sorted.filt.rds") #saves this version of the dataset
-
 ```
 
 This object should now be ready to integrate with the other samples.
-
-```{r}
-mira_markers <- read.csv("/Users/ta13/R_git/v10_miracidia/mira_topGO/prepsctmarkersmarker_roc_run1.combined.v10_dec19-stem.csv", stringsAsFactors = FALSE, header = TRUE) #import the marker data from somule papaer
-mira_markers$gene <- gsub('\\-', '_', mira_markers$gene) #replace dashes in geneid with underscores
-write.csv(x=mira_markers, file=('/Users/ta13/R_git/v10_miracidia/mira_topGO/prepsctmarkersmarker_roc_run1.combined.v10_dec19-stem-gene.csv'), row.names = FALSE) #save this as a csv
-
-```
