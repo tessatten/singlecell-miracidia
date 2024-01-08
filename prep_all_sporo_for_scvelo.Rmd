@@ -1,0 +1,119 @@
+---
+title: "prep_all_sporo_for_scvelo"
+author: "T Attenborough"
+date: "16/01/2023"
+output: html_document
+---
+
+```{r, message=FALSE}
+library(remotes)
+library(Seurat)
+library(zeallot) # For %<-% that unpacks lists in the Python manner
+library(DropletUtils)
+library(tidyverse)
+library(GGally) # For ggpairs
+library(scales)
+library(plotly)
+library(BUSpaRse)
+library(SeuratWrappers)
+library(SeuratData)
+library(SeuratDisk)
+theme_set(theme_bw())
+```
+
+```{r}
+sporo.big.forvelo <- merge(commCells_sample1, y = c(commCells_sample2, commCells_sample4, commCells_sample3), add.cell.ids = c("FUGI_R_D7465034", "FUGI_R_D7465035", "FUGI_R_D7465036", "FUGI_R_D7465037"), project = "sporocysts")
+sporo.big.forvelo
+
+
+```
+
+Sample 34 is definitely number 1
+Sample 35 is definitely number 2
+Sample 37 is definitely number 3
+Sample 36 is definitely number 4
+
+Here's lets save the filtered object for future use
+```{r}
+saveRDS(sporo.big.forvelo, file = "sporo.big.forvelo.rds") #saves this version of the dataset
+sporo.big.forvelo <- readRDS(file = "/Users/ta13/R_git/velo_sporo/sporo.big.forvelo.rds")
+
+```
+
+If you want to remove the ZW genes....
+```{r}
+sporo.big.forvelo <- subset(sporo.big.forvelo, features = mygenesNoZW$genes)
+
+```
+
+```{r}
+sporocysts3_neuro <- readRDS(file = "/Users/ta13/R_tutorials/sporocysts/sporocysts3_neuro.rds")
+sporocysts3_neuro[["may.ident"]] <- Idents(object = sporocysts3_neuro)
+
+DefaultAssay(sporocysts3_neuro) <- "RNA"
+```
+
+Extract list with metadata
+```{r}
+sporocysts3_neuro_metadata <- sporocysts3_neuro@meta.data
+
+sporo.big.forvelo_metadata <- sporo.big.forvelo@meta.data
+```
+
+```{r}
+library(tidyverse)
+sporocysts3_neuro_metadata <- tibble::rownames_to_column(sporocysts3_neuro_metadata, "Cell.IDs")
+sporo.big.forvelo_metadata <- tibble::rownames_to_column(sporo.big.forvelo_metadata, "Cell.IDs")
+
+sporocysts3_neuro_metadata$Cell.IDs <- strtrim(sporocysts3_neuro_metadata$Cell.IDs, 32)
+
+```
+
+
+Combine metadat. I am going to do an inner join: only if cellID is in both metadata tables
+```{r}
+commonsmeta <- merge(sporocysts3_neuro_metadata, sporo.big.forvelo_metadata, by = "Cell.IDs")
+
+commonsmeta$myIDs <- commonsmeta$Cell.IDs
+commonsmeta$stage <- "sporocyst"
+```
+
+
+
+Here, I am going to make a new object with only cells in both seurat objects
+```{r}
+toRemove <-c(commonsmeta$Cell.IDs)
+
+## filter them out:
+commCells <- sporo.big.forvelo[,colnames(sporo.big.forvelo) %in% toRemove]
+
+length(colnames(commCells))
+
+commonsmeta <- commonsmeta %>%
+     remove_rownames() %>%
+     column_to_rownames(var = 'Cell.IDs')
+```
+
+Then i am going to update the metadata with the combined metadata
+```{r}
+commonsmeta$batch <- commonsmeta$myIDs
+
+
+commonsmeta$batch <- strtrim(commonsmeta$batch, 15)
+table(commonsmeta$batch)
+commCells@meta.data <- commonsmeta
+```
+
+And now export of velocity analysis
+```{r}
+write.csv(x = commCells@meta.data, file = 'meta_filtered_fromOG_sporo_big_forvelo.csv')
+write.csv(x = t(as.matrix(commCells@assays$sf@counts)), file = 'spliced_raw_filtered_fromOG_sporo_big_forvelo.csv')
+write.csv(x = t(as.matrix(commCells@assays$uf@counts)), file = 'unspliced_raw_filtered_fromOG_sporo_big_forvelo.csv')
+```
+
+```{r}
+saveRDS(commCells, file = "commCells_sporocysts.rds") #saves this version of the dataset
+commCells <- readRDS(file = "/Users/ta13/R_git/velo_sporo/commCells_sporocysts.rds")
+
+```
+
