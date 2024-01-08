@@ -157,6 +157,16 @@ write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-1_Markers_Oct12_justgen
 ```
 
 ```{r}
+clustX <- markerGeneList[grepl('Neuron 4',markerGeneList$cluster),]
+#Select just those with at least myAUC of 0.7
+clustX <- clustX %>%
+  filter(myAUC >= 0.7)
+
+clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
+write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-4_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+```
+
+```{r}
 clustX <- markerGeneList[grepl('Neuron 2',markerGeneList$cluster),]
 #Select just those with at least myAUC of 0.7
 clustX <- clustX %>%
@@ -167,23 +177,13 @@ write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-2_Markers_Oct12_justgen
 ```
 
 ```{r}
-clustX <- markerGeneList[grepl('Neuron 3',markerGeneList$cluster),]
+clustX <- markerGeneList[grepl('Ciliary plate',markerGeneList$cluster),]
 #Select just those with at least myAUC of 0.7
 clustX <- clustX %>%
   filter(myAUC >= 0.7)
 
 clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
-write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-3_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
-```
-
-```{r}
-clustX <- markerGeneList[grepl('Neuron 4',markerGeneList$cluster),]
-#Select just those with at least myAUC of 0.7
-clustX <- clustX %>%
-  filter(myAUC >= 0.7)
-
-clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
-write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-4_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+write.table(x=clustX$gene, file="v10_GO_genelists/Ciliary-plate_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
 ```
 
 ```{r}
@@ -197,17 +197,17 @@ write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-5_Markers_Oct12_justgen
 ```
 
 ```{r}
-clustX <- markerGeneList[grepl('Neuron 6',markerGeneList$cluster),]
+clustX <- markerGeneList[grepl('Neuron 3',markerGeneList$cluster),]
 #Select just those with at least myAUC of 0.7
 clustX <- clustX %>%
   filter(myAUC >= 0.7)
 
 clustX$gene <- gsub('\\-', '_', clustX$gene) #replace dashes in geneid with underscores
-write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-6_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
+write.table(x=clustX$gene, file="v10_GO_genelists/Neuron-3_Markers_Oct12_justgenes.csv", col.names=FALSE, row.names=FALSE)
 ```
 
 ```{r}
-clustX <- markerGeneList[grepl('Neuron 1',markerGeneList$cluster) | grepl('Neuron 2',markerGeneList$cluster) | grepl('Neuron 3',markerGeneList$cluster) | grepl('Neuron 5',markerGeneList$cluster) | grepl('Neuron 6',markerGeneList$cluster),]
+clustX <- markerGeneList[grepl('Neuron 1',markerGeneList$cluster) | grepl('Neuron 4',markerGeneList$cluster) | grepl('Neuron 2',markerGeneList$cluster) | grepl('Neuron 5',markerGeneList$cluster) | grepl('Neuron 3',markerGeneList$cluster),]
 #Select just those with at least myAUC of 0.7
 clustX <- clustX %>%
   filter(myAUC >= 0.7)
@@ -361,11 +361,11 @@ Rscript TopGO_mira_v10.R Muscle-1_Markers_Oct12_justgenes.csv BP
 Rscript TopGO_mira_v10.R Muscle-2_Markers_Oct12_justgenes.csv BP
 
 Rscript TopGO_mira_v10.R Neuron-1_Markers_Oct12_justgenes.csv BP
-Rscript TopGO_mira_v10.R Neuron-2_Markers_Oct12_justgenes.csv BP
-Rscript TopGO_mira_v10.R Neuron-3_Markers_Oct12_justgenes.csv BP
 Rscript TopGO_mira_v10.R Neuron-4_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Neuron-2_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Ciliary-plates_Markers_Oct12_justgenes.csv BP
 Rscript TopGO_mira_v10.R Neuron-5_Markers_Oct12_justgenes.csv BP
-Rscript TopGO_mira_v10.R Neuron-6_Markers_Oct12_justgenes.csv BP
+Rscript TopGO_mira_v10.R Neuron-3_Markers_Oct12_justgenes.csv BP
 
 Rscript TopGO_mira_v10.R Parenchyma-1_Markers_Oct12_justgenes.csv BP
 Rscript TopGO_mira_v10.R Parenchyma-2_Markers_Oct12_justgenes.csv BP
@@ -391,9 +391,9 @@ topGO_summary_all <- read.csv("/Users/ta13/R_git/filtered_v10_miracidia/v10_GO_g
 ```{r}
 str(topGO_summary_all)
 ```
+
 ```{r}
 
-new_pal <- c("#9E0059","#007aaa","#ffb703","#c40c18","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#B3E9C7", "#FFFD82", "#2191FB", "#690500", "#57467B", "#B57F50","#2C514C","#c4b7cb" ,"#69A297" )
 new_pal <- c("#9E0059","#007aaa","#ffb703","#B3E9C7","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#c40c18", "#FFFD82", "#2191FB", "#690500", "#57467B", "#B57F50","#2C514C","#c4b7cb" ,"#FFCDB2" )
 ```
 
@@ -473,7 +473,7 @@ ggsave("v10_GO_genelists/topGO_miracidia_muscle_filtv10_plot1_longlist_twogenes.
 new_pal <- c("#00325b", "#107E7D", "#B3E9C7", "#B57F50", "#69A297")
 new_pal <- c( "#107E7D", "#57467B", "#FFCDB2")
 
-miracidia_neuron <- topGO_summary_all[topGO_summary_all$Cell.type=='Neuron 1' | topGO_summary_all$Cell.type=='Neuron 2' | topGO_summary_all$Cell.type=='Neuron 3' | topGO_summary_all$Cell.type=='Neuron 5' | topGO_summary_all$Cell.type=='Neuron 6' ,]
+miracidia_neuron <- topGO_summary_all[topGO_summary_all$Cell.type=='Neuron 1' | topGO_summary_all$Cell.type=='Neuron 4' | topGO_summary_all$Cell.type=='Neuron 2' | topGO_summary_all$Cell.type=='Neuron 5' | topGO_summary_all$Cell.type=='Neuron 3' ,]
 miracidia_neuron <- miracidia_neuron %>%
   filter(str_detect(genes, ","))
 
@@ -514,7 +514,7 @@ ggsave("v10_GO_genelists/topGO_miracidia_protonephridia_filtv10_plot1_longlist_t
 
 ```{r}
 new_pal <- c("#c4b7cb")
-miracidia_ciliary <- topGO_summary_all[topGO_summary_all$Cell.type=='Neuron 4' ,]
+miracidia_ciliary <- topGO_summary_all[topGO_summary_all$Cell.type=='Ciliary plate' ,]
 miracidia_ciliary
 miracidia_ciliary <- miracidia_ciliary %>%
   filter(str_detect(genes, ","))
@@ -527,7 +527,7 @@ ggsave("v10_GO_genelists/topGO_miracidia_ciliary_filtv10_plot1_longlist_twogenes
 ```
 
 ```{r}
-new_pal <- c("#c4b7cb","#007aaa","#ffb703","#c40c18","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#57467B", "#FFFD82", "#2191FB", "#690500", "#B3E9C7", "#B57F50","#2C514C","#754043" ,"#69A297" )
+new_pal <- c("#9E0059","#007aaa","#ffb703","#B3E9C7","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#c40c18", "#FFFD82", "#2191FB", "#690500", "#57467B", "#B57F50","#2C514C","#c4b7cb" ,"#FFCDB2" )
 ```
 
 ```{r}
