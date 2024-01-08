@@ -20,13 +20,7 @@ library(scater)
 library(DoubletFinder)
 ```
 
-First I am going to look at sample 4 from MIRACIDIA run 1
-
-```{r}
-run1.sample4.sorted.filt <- readRDS(file = "/Users/ta13/R_tutorials/neat_miracidia/run1.sample4.sorted.filt.rds")
-
-```
-
+First I am going to look at sample 4 from MIRACIDIA
 
 Import all run1 sample4 (sorted)
 ```{r}
@@ -87,7 +81,6 @@ run1.sample4.sorted@meta.data <- run1.sample4.sorted_metadata
 FeatureScatter(run1.sample4.sorted, "nCount_RNA", "percent.mt", group.by = "orig.ident", pt.size = 0.5)
 
 FeatureScatter(run1.sample4.sorted, "nFeature_RNA", "percent.mt", group.by = "orig.ident", pt.size = 0.5)
-
 ```
 
 For high quality data, the proportional histogram should contain a single large peak that represents cells that were encapsulated. If we see a small shoulder to the right of the major peak (not present in our data), or a bimodal distribution of the cells, that can indicate a couple of things. It might be that there are a set of cells that failed for some reason. It could also be that there are biologically different types of cells (i.e. quiescent cell populations, less complex cells of interest), and/or one type is much smaller than the other (i.e. cells with high counts may be cells that are larger in size). Therefore, this threshold should be assessed with other metrics. (From HBCTraining page)
@@ -136,6 +129,7 @@ run1.sample4.sorted_metadata %>%
   	ggtitle("Log10 of gene count per cell")
 
 ```
+
 ```{r}
 # Visualize the correlation between genes detected and number of UMIs and determine whether strong presence of cells with low numbers of genes/UMIs
 run1.sample4.sorted_metadata %>% 
@@ -184,7 +178,6 @@ run1.sample4.sorted_metadata %>%
   	theme_classic() +
   	geom_vline(xintercept = 5)+
   	ggtitle("Cell density by mito%")
-
 ```
 
 Look at cell complexity: in samples where each cell is sequenced less, it will have a higher complexity as the sequencing has not started to become saturated. For cells with complexity, this may be enough to approach saturation. Therefore these cells may be detected through low novelty scores. In an example, most cells had a novelty score above 0.8. From HBCTraining.
@@ -199,12 +192,7 @@ run1.sample4.sorted_metadata %>%
 
 Filter out cells with more than 5% mitochondrial gene expression and less than 500 UMIs, 
 
-Should I also consider:
-Lowering/changing the mito %? 
-putting a ceiling on number of genes/UMIs?
-and complexity less than 0.8?
-
-Min features is 300, set earlier when importing the seurat object
+Min features is 200, set earlier when importing the seurat object
 ```{r}
 run1.sample4.sorted <- subset(run1.sample4.sorted, subset = percent.mt < 5)
 
@@ -216,7 +204,6 @@ dim(run1.sample4.sorted) #shows number of genes and number of cells
 
 #run1.sample4.sorted <- subset(run1.sample4.sorted, subset = log10GenesPerUMI > 0.80)
 #dim(run1.sample4.sorted) #shows number of genes and number of cells
-
 ```
 
 Plot filtered QC
@@ -330,7 +317,6 @@ run1.sample4.sorted_metadata %>%
   	geom_vline(xintercept = 0.8)
 ```
 
-
 Then, let's save the new metadata file
 ```{r}
  # Save filtered subset to new metadata
@@ -357,7 +343,7 @@ mcv = molecularCrossValidation(run1.sample4.sorted@assays$RNA@counts, varGenes =
 
 plotMCV(mcv)
 ```
-Indicates 25 PCs min, two more than before
+Indicates 25 PCs min
 
 Now, perform dimensionality reduction by PCA and UMAP embedding
 
@@ -367,7 +353,6 @@ run1.sample4.sorted <- RunPCA(run1.sample4.sorted, features = VariableFeatures(o
 VizDimLoadings(run1.sample4.sorted, dims = 1:2, reduction = "pca") #shows the weightings of top contributing features to pcs 1 and 2
 DimHeatmap(run1.sample4.sorted, dims = 1, cells = 500, balanced = TRUE) #plots heatmap of top 500 mist variable cells for PC1, with relative gene expression
 #DimHeatmap(run1.sample4.sorted, dims = 1:15, cells = 500, balanced = TRUE) #this gives the heatmaps for PCs 1-15, so you can visually inspect the genes/PCs
-
 ```
 
 Use JackStraw to randomly permute data in 1% chunks. Here with 100 replicates and for 50 PCs
@@ -379,7 +364,6 @@ ggsave("run1.sample4_jackstrawplot.pdf", width = 30, height = 15, units = c('cm'
 
 ElbowPlot(run1.sample4.sorted, ndims = 50)  #ranks PCs by percentage of variation. A clear dropoff is sometimes seen, though not really here.
 ggsave("run1.sample4_elbowplot.pdf")
-
 ```
 
 Next comes clustering and plotting of clusters.
@@ -397,7 +381,7 @@ clustree(run1.sample4.sorted)
 ggsave("run1.sample4.sortedclust_36PC_0_to_1_tree_RNA.pdf")
 ```
 
-Based on the clustree results, I am going to choose an initial res of 0.7 with 40PCs
+Based on the clustree results, I am going to choose an initial res of 0.7 with 36PCs
 
 ```{r}
 run1.sample4.sorted <- FindClusters(run1.sample4.sorted, resolution = 0.7) #this iteratively groups cells using Louvain algorithm (default). Resolution sets the granularity. 0.4-1.2 gives good results for ~3K cells, with larger number suiting larger datasets.
@@ -407,9 +391,7 @@ ggsave("run1.sample4.sortedclust_36PC_0.7res_batchRegressed_after1filt.pdf")
 
 FeaturePlot(run1.sample4.sorted, features="nCount_RNA", label=TRUE)
 ggsave("run1.sample4.sortedclust_36PC_0.7res_UMIs.pdf")
-
 ```
-
 
 Now, use DoubletFinder to find and remove doublets.
 
@@ -446,9 +428,6 @@ table(run1.sample4.sorted$DF.classifications_0.25_0.3_303) #shows number of gene
 
 DimPlot(run1.sample4.sorted, reduction = "umap", group.by = "DF.classifications_0.25_0.3_303") #visulaises the UMAP
 ggsave("run1.sample4.sorted_doublets.pdf")
-
-
-
 ```
 
 We should expect that two cells have more detected genes than a single cell, lets check if our predicted doublets also have more detected genes in general.
@@ -456,7 +435,6 @@ We should expect that two cells have more detected genes than a single cell, let
 VlnPlot(run1.sample4.sorted, features = "nFeature_RNA", group.by = 'DF.classifications_0.25_0.3_303', pt.size = 0.1)
 
 FeatureScatter(run1.sample4.sorted, "nFeature_RNA", "nCount_RNA", group.by = "DF.classifications_0.25_0.3_303", pt.size = 0.5)
-
 ```
 
 Now, lets remove all predicted doublets from our data. I also so want to save the doublets, to see what's in them later, just in case.
@@ -466,22 +444,17 @@ run1.sample4.sorted.doublets = run1.sample4.sorted[, run1.sample4.sorted@meta.da
 
 dim(run1.sample4.sorted.filt)
 
-
-
 run1.sample4.sorted.metadata <- run1.sample4.sorted@meta.data
 
 ggplot(run1.sample4.sorted.metadata, aes(nFeature_RNA, pANN_0.25_0.3_303, color=DF.classifications_0.25_0.3_303)) + geom_point()
 ggsave("run1.sample4.sorted.df_scores_0.08.pdf")
-
 ```
 
 Leaves 3852 cells and 8621 genes
-
  Save the doublet-free data, and the doublets
 ```{r}
 #saveRDS(run1.sample4.sorted.filt, file = "run1.sample4.sorted_afterDF.rds") #saves this version of the dataset
 saveRDS(run1.sample4.sorted.doublets, file = "run1.sample4.sorted_doublets.rds") #saves this version of the dataset
-
 ```
 
 Now, rerun the visual QC.
@@ -616,16 +589,9 @@ I am going to use sctransform, which takes the place of NormalizeData, FindVaria
 run1.sample4.sorted.filt <- SCTransform(run1.sample4.sorted.filt, vars.to.regress = c("percent.mt"), verbose = FALSE, return.only.var.genes = FALSE)
 ```
 
-```{r}
-run1.sample4.sorted <- run1.sample4.sorted %>% 
-    SCTransform(vars.to.regress = "percent.mt") %>% RunPCA() %>% FindNeighbors(dims = 1:30) %>% 
-    RunUMAP(dims = 1:30) %>% FindClusters()
-```
-
 Here, we perform PCA on the scaled data. The most variable features selected earlier are used.
 ```{r}
 #DefaultAssay(run1.sample4.sorted) <- "SCT"
-
 
 run1.sample4.sorted.filt <- RunPCA(run1.sample4.sorted.filt, features = VariableFeatures(object = run1.sample4.sorted.filt)) #shows top contributing features for the PCs
 VizDimLoadings(run1.sample4.sorted.filt, dims = 1:2, reduction = "pca") #shows the weightings of top contributing features to pcs 1 and 2
@@ -640,8 +606,6 @@ Next comes clustering and plotting of clusters.
 run1.sample4.sorted.filt <- FindNeighbors(run1.sample4.sorted.filt, dims = 1:40) #here construct k-nearst neighbours graoh based on euclidean distance in PCA space, then refine edge weights based on Jaccard similarity. this takes the number of PCs previously determined as importan (here 15 PCs_)
 run1.sample4.sorted.filt <- FindClusters(run1.sample4.sorted.filt, resolution = 0.5) #this iteratively groups cells using Louvain algorithm (default). Resolution sets the granularity. 0.4-1.2 gives good results for ~3K cells, with larger number suiting larger datasets.
 
-
-
 # Select a range of resolutions
 resolution.range <- seq(from = 0, to = 1, by = 0.2)
 
@@ -654,7 +618,6 @@ ggsave("run1.sample4.sorted.filt.clust_40PC_0_to_1_tree_SCT.pdf")
 
 
 Based on the clustree results, I am going to choose an res of 0.8 with 40PCs
-
 ```{r}
 run1.sample4.sorted.filt <- FindClusters(run1.sample4.sorted.filt, resolution = 0.8) #this iteratively groups cells using Louvain algorithm (default). Resolution sets the granularity. 0.4-1.2 gives good results for ~3K cells, with larger number suiting larger datasets.
 run1.sample4.sorted.filt <- RunUMAP(run1.sample4.sorted.filt, dims = 1:40) #runs umap to visualise the clusters. Need to set the number of PCs
@@ -673,7 +636,7 @@ ggsave("run1.sample4.sorted.filt_40PC_0.8res_genes_SCT.pdf")
 
 Now, import the final somule data object from Carmen
 ```{r}
-somules <- readRDS(file = "/Users/ta13/R_tutorials/sporocysts/V9_no_CDSUTR_Tess_Carmen 2/data/Seurat_Object/Final_objects/somules.RDS")
+somules <- readRDS(file = "/Users/ta13/data/Seurat_Object/Final_objects/somules.RDS")
 ```
 
 Use somule data to initially project annotations onto miracidia run1 sorted data

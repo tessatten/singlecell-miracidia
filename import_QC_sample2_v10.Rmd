@@ -20,21 +20,13 @@ library(scater)
 library(DoubletFinder)
 ```
 
-First I am going to look at sample 2 from MIRACIDIA run 1
-
-```{r}
-run1.v10.sample2.unsorted.filt <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/")
-
-```
-
+First I am going to look at sample 2 from MIRACIDIA
 
 Import all run1.v10 sample2 (unsorted)
 ```{r}
 run1.v10.sample2.mira.data <- Read10X(here(c('/Users/ta13/Miracidia/v10_filtered//Sample2/filtered_feature_bc_matrix/')))
 ```
 Initially there are 12,939 cells and 9,920 genes.
-
-Minus 10 cells!
 
 Import into a Seurat object, removing any genes which don't appear in at least 3 cells, and any cells which express less than 200 genes.
 ```{r}
@@ -89,7 +81,6 @@ run1.v10.sample2.unsorted@meta.data <- run1.v10.sample2.unsorted_metadata
 FeatureScatter(run1.v10.sample2.unsorted, "nCount_RNA", "percent.mt", group.by = "orig.ident", pt.size = 0.5)
 
 FeatureScatter(run1.v10.sample2.unsorted, "nFeature_RNA", "percent.mt", group.by = "orig.ident", pt.size = 0.5)
-
 ```
 
 For high quality data, the proportional histogram should contain a single large peak that represents cells that were encapsulated. If we see a small shoulder to the right of the major peak (not present in our data), or a bimodal distribution of the cells, that can indicate a couple of things. It might be that there are a set of cells that failed for some reason. It could also be that there are biologically different types of cells (i.e. quiescent cell populations, less complex cells of interest), and/or one type is much smaller than the other (i.e. cells with high counts may be cells that are larger in size). Therefore, this threshold should be assessed with other metrics. (From HBCTraining page)
@@ -138,6 +129,7 @@ run1.v10.sample2.unsorted_metadata %>%
   	ggtitle("Log10 of gene count per cell")
 
 ```
+
 ```{r}
 # Visualize the correlation between genes detected and number of UMIs and determine whether strong presence of cells with low numbers of genes/UMIs
 run1.v10.sample2.unsorted_metadata %>% 
@@ -201,12 +193,7 @@ run1.v10.sample2.unsorted_metadata %>%
 
 Filter out cells with more than 5% mitochondrial gene expression and less than 500 UMIs, 
 
-Should I also consider:
-Lowering/changing the mito %? 
-putting a ceiling on number of genes/UMIs?
-and complexity less than 0.8?
-
-Min features is 300, set earlier when importing the seurat object
+Min features is 200, set earlier when importing the seurat object
 ```{r}
 run1.v10.sample2.unsorted <- subset(run1.v10.sample2.unsorted, subset = percent.mt < 5)
 
@@ -221,8 +208,6 @@ dim(run1.v10.sample2.unsorted) #shows number of genes and number of cells
 
 ```
 Now 8,855 genes and 12,771 cells
-
-plus a few cells!
 
 Plot filtered QC
 Lets plot the same QC-stats another time. Actually, let's re-plot some more of them too!!
@@ -372,7 +357,6 @@ run1.v10.sample2.unsorted <- RunPCA(run1.v10.sample2.unsorted, features = Variab
 VizDimLoadings(run1.v10.sample2.unsorted, dims = 1:2, reduction = "pca") #shows the weightings of top contributing features to pcs 1 and 2
 DimHeatmap(run1.v10.sample2.unsorted, dims = 1, cells = 500, balanced = TRUE) #plots heatmap of top 500 mist variable cells for PC1, with relative gene expression
 #DimHeatmap(run1.v10.sample2.unsorted, dims = 1:15, cells = 500, balanced = TRUE) #this gives the heatmaps for PCs 1-15, so you can visually inspect the genes/PCs
-
 ```
 
 Use JackStraw to randomly permute data in 1% chunks. Here with 100 replicates and for 50 PCs
@@ -384,7 +368,6 @@ ggsave("run1.v10.sample2_jackstrawplot.pdf", width = 30, height = 15, units = c(
 
 ElbowPlot(run1.v10.sample2.unsorted, ndims = 50)  #ranks PCs by percentage of variation. A clear dropoff is sometimes seen, though not really here.
 ggsave("run1.v10.sample2_elbowplot.pdf")
-
 ```
 
 Next comes clustering and plotting of clusters.
@@ -402,7 +385,7 @@ clustree(run1.v10.sample2.unsorted)
 ggsave("run1.v10.sample2.unsortedclust_33PC_0_to_1.5_tree_RNA.pdf")
 ```
 
-Based on the clustree results, I am going to choose an initial res of 0.7 with 40PCs
+Based on the clustree results, I am going to choose an initial res of 0.6 with 33PCs
 
 ```{r}
 run1.v10.sample2.unsorted <- FindClusters(run1.v10.sample2.unsorted, resolution = 0.6) #this iteratively groups cells using Louvain algorithm (default). Resolution sets the granularity. 0.4-1.2 gives good results for ~3K cells, with larger number suiting larger datasets.
@@ -454,9 +437,6 @@ table(run1.v10.sample2.unsorted$DF.classifications_0.25_0.005_6069) #shows numbe
 
 DimPlot(run1.v10.sample2.unsorted, reduction = "umap", group.by = "DF.classifications_0.25_0.005_6069") #visulaises the UMAP
 ggsave("run1.v10.sample2.unsorted_doublets_52.pdf")
-
-
-
 ```
 
 We should expect that two cells have more detected genes than a single cell, lets check if our predicted doublets also have more detected genes in general.
@@ -464,7 +444,6 @@ We should expect that two cells have more detected genes than a single cell, let
 VlnPlot(run1.v10.sample2.unsorted, features = "nFeature_RNA", group.by = 'DF.classifications_0.25_0.005_6069', pt.size = 0.1)
 
 FeatureScatter(run1.v10.sample2.unsorted, "nFeature_RNA", "nCount_RNA", group.by = "DF.classifications_0.25_0.005_6069", pt.size = 0.5)
-
 ```
 
 Now, lets remove all predicted doublets from our data. I also so want to save the doublets, to see what's in them later, just in case.
@@ -478,7 +457,6 @@ run1.v10.sample2.unsorted.metadata <- run1.v10.sample2.unsorted@meta.data
 
 ggplot(run1.v10.sample2.unsorted.metadata, aes(nFeature_RNA, pANN_0.25_0.005_6069, color=DF.classifications_0.25_0.005_6069)) + geom_point()
 ggsave("run1.v10.sample2.unsorted.df_scores_0.528.pdf")
-
 ```
 
 Leaves 6702 cells and 8855 genes
@@ -487,7 +465,6 @@ Leaves 6702 cells and 8855 genes
 ```{r}
 #saveRDS(run1.v10.sample2.unsorted.filt, file = "run1.v10.sample2.unsorted_afterDF.rds") #saves this version of the dataset
 saveRDS(run1.v10.sample2.unsorted.doublets, file = "run1.v10.sample2.unsorted_doublets_52.rds") #saves this version of the dataset
-
 ```
 
 Now, rerun the visual QC.
@@ -626,7 +603,6 @@ Here, we perform PCA on the scaled data. The most variable features selected ear
 ```{r}
 #DefaultAssay(run1.v10.sample2.unsorted) <- "SCT"
 
-
 run1.v10.sample2.unsorted.filt <- RunPCA(run1.v10.sample2.unsorted.filt, features = VariableFeatures(object = run1.v10.sample2.unsorted.filt)) #shows top contributing features for the PCs
 VizDimLoadings(run1.v10.sample2.unsorted.filt, dims = 1:2, reduction = "pca") #shows the weightings of top contributing features to pcs 1 and 2
 DimHeatmap(run1.v10.sample2.unsorted.filt, dims = 1, cells = 500, balanced = TRUE) #plots heatmap of top 500 mist variable cells for PC1, with relative gene expression
@@ -643,7 +619,6 @@ mcv = molecularCrossValidation(run1.v10.sample2.unsorted.filt@assays$RNA@counts,
 
 plotMCV(mcv)
 ```
-
 Now, min 13 PCs
 
 Next comes clustering and plotting of clusters.
@@ -684,7 +659,7 @@ ggsave("run1.v10.sample2.unsorted.filt_30PC_1res_genes_SCT_52.pdf")
 
 Now, import the final somule data object from Carmen
 ```{r}
-somules <- readRDS(file = "/Users/ta13/R_tutorials/sporocysts/V9_no_CDSUTR_Tess_Carmen 2/data/Seurat_Object/Final_objects/somules.RDS")
+somules <- readRDS(file = "/Users/ta13/data/Seurat_Object/Final_objects/somules.RDS")
 ```
 
 Use somule data to initially project annotations onto miracidia run1.v10 unsorted data
@@ -701,7 +676,7 @@ DimPlot(run1.v10.sample2.unsorted.filt, group.by = 'predicted.id', label = T, la
 ggsave("run1.v10.sample2.unsorted.filt_labels_from_somules_SCT_mtRegressed_PC30.pdf")
 
 DimPlot(run1.v10.sample2.unsorted.filt, reduction = "umap", group.by = "plex") #visulaises the UMAP
-ggsave("run1.v10.sample2.unsorted.filt_PC38_res0.8_batchRegressed_SCT.pdf")
+ggsave("run1.v10.sample2.unsorted.filt_PC30_res0.8_batchRegressed_SCT.pdf")
 ```
 
 Attach some annotation info from somule markers
@@ -724,8 +699,6 @@ run1.v10.sample2.unsorted.filt.top5_roc_RNA=run1.v10.sample2.unsorted.filt.marke
 write.csv(x=run1.v10.sample2.unsorted.filt.markers_roc_RNA, file="top5_markerz_roc_run1.v10.sample2.unsorted.filt_SCT_52.csv")
 ```
 
-Cluster 22 is probably just junk - lots of MT and HSP, etc
-
 Then, let's save the new metadata file
 ```{r}
  # Save filtered subset to new metadata
@@ -736,7 +709,6 @@ run1.v10.sample2.unsorted.metadata <- run1.v10.sample2.unsorted@meta.data
 run1.v10.sample2.unsorted.metadata$DF.classifications_0.25_0.005_6069
 ggplot(run1.v10.sample2.unsorted.metadata, aes(nFeature_RNA, pANN_0.25_0.005_6069, color=DF.classifications_0.25_0.005_6069)) + geom_point()
 ggsave("run1.v10.sample2.unsorted.filt_PC38_res0.8_batchRegressed_SCT.pdf")
-
 ```
 
 Here's lets save the filtered object for future use

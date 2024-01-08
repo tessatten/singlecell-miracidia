@@ -20,7 +20,7 @@ library(scater)
 library(DoubletFinder)
 ```
 
-First I am going to look at sample 1 from MIRACIDIA run 1
+First I am going to look at sample 1 from MIRACIDIA
 
 Import all run1.v10 sample1 (sorted)
 ```{r}
