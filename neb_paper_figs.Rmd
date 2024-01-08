@@ -1,0 +1,198 @@
+---
+title: "neb_figs_paper"
+author: "T Attenborough"
+date: "2023-11-15"
+output: html_document
+---
+
+```{r}
+library(sleuth)
+library(patchwork)
+library(here)
+library(RColorBrewer)
+library(tidyverse)
+library(ggrepel)
+library(rhdf5)
+```
+
+```{r}
+st=format(Sys.time(), "%Y-%m-%d") 
+st
+```
+
+The first step in a sleuth analysis is to specify where the kallisto results are stored. A variable is created for this purpose with
+
+```{r}
+sample_id <- dir("/Users/ta13/R_git/april2023_NEB_sleuth/results")
+```
+
+The result can be displayed by typing
+
+```{r}
+sample_id
+
+library(stringr)
+
+sample_id <- str_sort(sample_id, numeric = TRUE)
+sample_id
+```
+
+A list of paths to the kallisto results indexed by the sample IDs is collated with
+```{r}
+kal_dirs <- file.path("/Users/ta13/R_git/v10_kallisto_neb/results", sample_id)
+kal_dirs
+```
+
+The next step is to load an auxillary table that describes the experimental design and the relationship between the kallisto directories and the samples:
+```{r}
+s2c <- read.csv(("/Users/ta13/R_git/v10_kallisto_neb/metadata/sample_info_mapping.csv"), header = TRUE, stringsAsFactors=FALSE)
+s2c <- dplyr::select(s2c, sample = kallisto_name, type)
+s2c
+
+all_metadat <- read.csv(("/Users/ta13/R_git/v10_kallisto_neb/metadata/sample_info_mapping.csv"), header = TRUE, stringsAsFactors=FALSE)
+
+```
+
+Now the directories must be appended in a new column to the table describing the experiment. This column must be labeled path, otherwise sleuth will report an error. This is to ensure that samples can be associated with kallisto quantifications.
+
+```{r}
+s2c <- dplyr::mutate(s2c, path = kal_dirs)
+print(s2c)
+```
+
+Problem with NA values. Removing the two samples with less than 1% reads mapping to the transcriptome fixes this
+```{r}
+s2c <- read.csv(("/Users/ta13/R_git/v10_kallisto_neb/s2c_sorted_checked.csv"), header = TRUE, stringsAsFactors=FALSE, fill = TRUE )
+print(s2c)
+```
+
+Now, need to filter to only cells with only 1 cell in the well
+```{r}
+s2c <- read.csv(("/Users/ta13/R_git/v10_kallisto_neb/s2c_allcells_1_min20perc.csv"), header = TRUE, stringsAsFactors=FALSE, fill = TRUE )
+print(s2c)
+```
+
+```{r}
+table (s2c$type_broad)
+```
+
+
+Next, the “sleuth object” can be constructed. This object will store not only the information about the experiment, but also details of the model to be used for differential testing, and the results. It is prepared and used with four commands that (1) load the kallisto processed data into the object (2) estimate parameters for the sleuth response error measurement (full) model (3) estimate parameters for the sleuth reduced model, and (4) perform differential analysis (testing) using the likelihood ratio test. On a laptop the four steps should take about a few minutes altogether.
+
+The sleuth object must first be initialized with
+```{r}
+so <- sleuth_prep(s2c, extra_bootstrap_summary = TRUE,read_bootstrap_tpm = TRUE)
+```
+
+Then the full model is fit with
+```{r}
+so <- sleuth_fit(so, ~type_broad, 'full')
+```
+
+```{r}
+so <- sleuth_fit(so, ~1, 'reduced')
+```
+
+and the test is performed with
+
+
+```{r}
+so <- sleuth_lrt(so, 'reduced', 'full')
+```
+
+In general, sleuth can utilize the likelihood ratio test with any pair of models that are nested, and other walkthroughs illustrate the power of such a framework for accounting for batch effects and more complex experimental designs.
+
+The models that have been fit can always be examined with the models() function.
+```{r}
+models(so)
+```
+
+The results of the test can be examined with
+```{r}
+sleuth_table <- sleuth_results(so, 'reduced:full', 'lrt', show_all = FALSE)
+sleuth_significant <- dplyr::filter(sleuth_table, qval <= 0.05)
+head(sleuth_significant, 20)
+```
+
+Import annotation information
+```{r}
+v10_genelist <- read.csv("/Users/ta13/R_git/cerc_som_v10/v10_genes_with_descriptions_2023-04-17.csv", stringsAsFactors = FALSE, header = TRUE) #import the marker data from somule papaer
+v10_genelist$X <- NULL 
+```
+
+Save this!
+```{r}
+write.csv(sleuth_significant, file = "sleuth_significant_76samples-allcells_model_celltype.csv")
+
+sleuth_significant$target_id_trim <- sleuth_significant$target_id
+sleuth_significant$target_id_trim <- strtrim(sleuth_significant$target_id_trim, 10)
+
+sleuth_significant <- sleuth_significant %>% left_join(v10_genelist, by = c("target_id_trim" = "Gene.stable.ID")) #check the top 5 marker genes are also in the somule paper
+write.csv(sleuth_significant, file = "sleuth_significant_76samples-allcells_model_celltype_genedescriptions.csv")
+
+```
+
+
+```{r}
+plot1 = plot_transcript_heatmap(so, c("Smp_045220.1","Smp_091460.1","Smp_179810.1","Smp_068500.1","Smp_307020.1","Smp_347110.1","Smp_030370.1","Smp_203635.1","Smp_306710.1","Smp_173910.1","Smp_322950.1","Smp_900070.1","Smp_053940.1","Smp_266740.1","Smp_030290.1","Smp_337100.5","Smp_045510.1","Smp_097800.1","Smp_008545.1","Smp_079770.1"), units = "tpm", trans = "log",
+  cluster_transcripts = FALSE, offset = 1, color_high = "#581845",
+  color_mid = "#FFC300", color_low = "#DAF7A6", x_axis_angle = 50,
+  annotation_cols = setdiff(colnames(so$sample_to_covariates), "sample"))
+plot1
+ggsave(plot = plot1, paste("miracidia-NEB-kallisto-allcells-76samples-1-heatmap-top20sigGlandCiliary" ,st, ".pdf", sep = "-"), width = 32, height = 35, units = c('cm'))
+```
+
+```{r}
+plot1 = plot_transcript_heatmap(so, c("Smp_050220.1","Smp_073270.1"), units = "tpm", trans = "log",
+  cluster_transcripts = FALSE, offset = 1, color_high = "#581845",
+  color_mid = "#FFC300", color_low = "#DAF7A6", x_axis_angle = 50,
+  annotation_cols = setdiff(colnames(so$sample_to_covariates), "sample"))
+plot1
+ggsave(plot = plot1, paste("miracidia-NEB-kallisto-allcells-76samples-1-heatmap-neural" ,st, ".pdf", sep = "-"), width = 32, height = 35, units = c('cm'))
+```
+
+```{r}
+plot1 = plot_transcript_heatmap(so, c("Smp_002630.1","Smp_120670.1","Smp_176180.1","Smp_070250.1","Smp_331830.1","Smp_160250.1"), units = "tpm", trans = "log",
+  cluster_transcripts = FALSE, offset = 1, color_high = "#581845",
+  color_mid = "#FFC300", color_low = "#DAF7A6", x_axis_angle = 50,
+  annotation_cols = setdiff(colnames(so$sample_to_covariates), "sample"))
+plot1
+ggsave(plot = plot1, paste("miracidia-NEB-kallisto-allcells-76samples-1-heatmap-val" ,st, ".pdf", sep = "-"), width = 32, height = 35, units = c('cm'))
+```
+
+```{r}
+plot1 = plot_transcript_heatmap(so, c("Smp_303400.1","Smp_179250.1","Smp_317530.1","Smp_185680.2","Smp_303690.1"), units = "tpm", trans = "log",
+  cluster_transcripts = FALSE, offset = 1, color_high = "#581845",
+  color_mid = "#FFC300", color_low = "#DAF7A6", x_axis_angle = 50,
+  annotation_cols = setdiff(colnames(so$sample_to_covariates), "sample"))
+plot1
+ggsave(plot = plot1, paste("miracidia-NEB-kallisto-allcells-76samples-1-heatmap-top20sigGlandBrain" ,st, ".pdf", sep = "-"), width = 32, height = 35, units = c('cm'))
+```
+
+```{r}
+plot1 = plot_transcript_heatmap(so, c("Smp_096390.1","Smp_097490.1","Smp_003330.1","Smp_055630.1","Smp_347580.1"), units = "tpm", trans = "log",
+  cluster_transcripts = FALSE, offset = 1, color_high = "#581845",
+  color_mid = "#FFC300", color_low = "#DAF7A6", x_axis_angle = 50,
+  annotation_cols = setdiff(colnames(so$sample_to_covariates), "sample"))
+plot1
+ggsave(plot = plot1, paste("miracidia-NEB-kallisto-allcells-76samples-1-heatmap-Ciliary" ,st, ".pdf", sep = "-"), width = 32, height = 35, units = c('cm'))
+```
+
+```{r}
+plot1 = plot_transcript_heatmap(so, c("Smp_302170.1","Smp_049230.1","Smp_304250.1","Smp_302180.1","Smp_333390.1","Smp_333390.2","Smp_315690.1","Smp_315690.2","Smp_098420.1","Smp_145290.1"), units = "tpm", trans = "log",
+  cluster_transcripts = FALSE, offset = 1, color_high = "#581845",
+  color_mid = "#FFC300", color_low = "#DAF7A6", x_axis_angle = 50,
+  annotation_cols = setdiff(colnames(so$sample_to_covariates), "sample"))
+plot1
+ggsave(plot = plot1, paste("miracidia-NEB-kallisto-allcells-76samples-1-heatmap-secreted" ,st, ".pdf", sep = "-"), width = 32, height = 35, units = c('cm'))
+```
+
+```{r}
+plot1 = plot_transcript_heatmap(so, c("Smp_045220.1","Smp_091460.1","Smp_179810.1","Smp_068500.1","Smp_307020.1","Smp_347110.1","Smp_030370.1","Smp_203635.1","Smp_306710.1","Smp_173910.1","Smp_322950.1","Smp_900070.1","Smp_053940.1","Smp_266740.1","Smp_030290.1","Smp_337100.5","Smp_045510.1","Smp_097800.1","Smp_008545.1","Smp_079770.1","Smp_050220.1","Smp_073270.1","Smp_002630.1","Smp_120670.1","Smp_176180.1","Smp_070250.1","Smp_331830.1","Smp_160250.1","Smp_303400.1","Smp_179250.1","Smp_317530.1","Smp_185680.2","Smp_303690.1","Smp_096390.1","Smp_097490.1","Smp_003330.1","Smp_055630.1","Smp_347580.1","Smp_302170.1","Smp_049230.1","Smp_304250.1","Smp_302180.1","Smp_333390.1","Smp_333390.2","Smp_315690.1","Smp_315690.2","Smp_098420.1","Smp_145290.1"), units = "tpm", trans = "log",
+  cluster_transcripts = FALSE, offset = 1, color_high = "#581845",
+  color_mid = "#FFC300", color_low = "#DAF7A6", x_axis_angle = 50,
+  annotation_cols = setdiff(colnames(so$sample_to_covariates), "sample"))
+plot1
+ggsave(plot = plot1, paste("miracidia-NEB-kallisto-allcells-76samples-1-heatmap-allinterestinggenes" ,st, ".pdf", sep = "-"), width = 25, height = 35, units = c('cm'))
+```
+
