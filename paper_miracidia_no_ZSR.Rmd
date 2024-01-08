@@ -177,17 +177,17 @@ run1.combined.v10 <- RenameIdents(object = run1.combined.v10,
                                "5" = "Stem B",
                                "6" = "Neuron 1",
                                "7" = "Muscle 2",
-                               "8" = "Neuron 2",
+                               "8" = "Neuron 4",
                                "9" = "Parenchyma 1",
                                "10" = "Stem E",
                                "11" = "Parenchyma 2",
                                "12" = "Protonephridia",
                                "13" = "Tegument",
-                               "14" = "Neuron 3",
+                               "14" = "Neuron 2",
                                "15" = "Neuron 5",
                                "16" = "Stem G",
-                               "17" = "Neuron 4", 
-                              "18" = "Neuron 6")
+                               "17" = "Ciliary plate", 
+                              "18" = "Neuron 3")
 
 
 run1.combined.v10[["merge.ident"]] <- Idents(object = run1.combined.v10)
