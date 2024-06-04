@@ -1,0 +1,242 @@
+---
+title: "figs_for_update"
+author: "T Attenborough"
+date: "2024-05-07"
+output: html_document
+---
+
+```{r}
+library(Seurat) #Seurat v4.0.2
+library(dplyr)
+library(patchwork)
+library(here)
+library(ggplot2)
+library(clustree)
+library(SingleCellExperiment)
+library(scater)
+library(DoubletFinder)
+library(zellkonverter)
+library(basilisk)
+library(ggpubr)
+
+#sessionInfo()
+```
+
+```{r}
+run1.combined.v10 <- readRDS(file = "/Users/ta13/R_git/filtered_v10_miracidia/run1.combined.v10_integrated_55.rds")
+```
+
+```{r}
+st=format(Sys.time(), "%Y-%m-%d") 
+st
+```
+
+```{r}
+DefaultAssay(run1.combined.v10) <- "integrated"
+run1.combined.v10 <- RenameIdents(object = run1.combined.v10, 
+                               "0" = "Muscle 1",
+                               "1" = "Stem C",
+                               "2" = "Stem D",
+                               "3" = "Stem F",
+                               "4" = "Stem A",
+                               "5" = "Stem B",
+                               "6" = "Neuron 1",
+                               "7" = "Muscle 2",
+                               "8" = "Neuron 4",
+                               "9" = "Parenchyma 1",
+                               "10" = "Stem E",
+                               "11" = "Parenchyma 2",
+                               "12" = "Protonephridia",
+                               "13" = "Tegument",
+                               "14" = "Neuron 2",
+                               "15" = "Neuron 5",
+                               "16" = "Stem G",
+                               "17" = "Ciliary plate", 
+                              "18" = "Neuron 3")
+
+
+run1.combined.v10[["merge.ident"]] <- Idents(object = run1.combined.v10)
+run1.combined.v10[["may.ident"]] <- Idents(object = run1.combined.v10)
+
+DimPlot(run1.combined.v10, reduction = "umap", label=TRUE) #visulaises the UMAP
+p2 <- DimPlot(run1.combined.v10, reduction = "umap", label = TRUE, repel = TRUE)
+p2
+```
+
+Import annotation information
+```{r}
+v10_genelist <- read.csv("/Users/ta13/R_git/cerc_som_v10/v10_genes_with_descriptions_2023-04-17.csv", stringsAsFactors = FALSE, header = TRUE) #import the marker data from cercule papaer
+v10_genelist$X <- NULL 
+```
+
+Make a new color pallete for the 'fancy' umap
+```{r}
+new_pal <- c("#9E0059","#007aaa","#ffb703","#B3E9C7","#fb8500","#7851a9","#00325b","#8ACB88","#107E7D", "#FB6376", "#c40c18", "#FFFD82", "#2191FB", "#690500", "#57467B", "#B57F50","#2C514C","#c4b7cb" ,"#FFCDB2" )
+scales::show_col(new_pal)
+plot1 <- DimPlot(run1.combined.v10, reduction = "umap", label = FALSE, repel = TRUE, label.box = FALSE) + NoLegend() +scale_color_manual(values = new_pal)
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75)
+
+ggsave(paste("figs_may24/run1.combined.v10_umap_oldfancylabels-",st, ".pdf", sep = ""), width = 25, height = 20, units = c('cm'))
+ggsave(paste("figs_may24/run1.combined.v10_umap_oldfancylabels-small-",st, ".pdf", sep = ""))
+```
+
+
+##Show sorted/unsorted
+```{r}
+plot1 <- DimPlot(run1.combined.v10, reduction = "umap", label = FALSE, repel = TRUE, label.box = FALSE, split.by = "type") + NoLegend() +scale_color_manual(values = new_pal)
+plot2 <- LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75, max.overlaps = Inf)
+plot2
+
+my_pal <- c("#BA2D0B", "#8EB1C7")
+plot3 <- DimPlot(run1.combined.v10, reduction = "umap", label = FALSE, repel = TRUE, group.by = "type", shuffle = TRUE)+scale_color_manual(values = my_pal)
+plot3
+ggsave(paste("figs_may24/run1.combined.v10_umap_sorting-small-",st, ".pdf", sep = ""))
+
+
+my_pal <- c("#DF9A57", "#306B34", "#EDADC7", "#2A628F")
+plot4 <- DimPlot(run1.combined.v10, reduction = "umap", label = FALSE, repel = TRUE, group.by = "plex", shuffle = TRUE)+scale_color_manual(values = my_pal)
+plot4
+ggsave(paste("figs_may24/run1.combined.v10_umap_sample-small-",st, ".pdf", sep = ""))
+
+
+plot2 /
+  (plot3 + plot4) +  plot_layout(guides = "collect")
+ggsave(paste("figs_may24/run1.combined.v10_umap_sorting-patchwork-",st, ".pdf", sep = ""), width = 30, height = 20, units = c('cm'))
+
+```
+Subcluster stem F and G?
+
+```{r}
+
+```
+
+Ago in all cells
+```{r}
+DefaultAssay(run1.combined.v10) <- "RNA"
+plot1 <- FeaturePlot(run1.combined.v10, features = "Smp-179320")
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75, max.overlaps = Inf)
+ggsave("figs_may24/run1.combined.v10-umap-Smp-179320-.pdf", width = 25, height = 15, units = c('cm'))
+```
+
+Co-expression of ago and complexin
+```{r}
+DefaultAssay(run1.combined.v10) <- "RNA"
+
+coexpression.plot <-FeaturePlot(run1.combined.v10, features = c("Smp-179320", "Smp-050220"), blend = TRUE)
+coexpression.plot
+ggsave(paste("figs_may24/run1.combined.v10-coexpressed-Smp-179320-Smp-050220.pdf"), width = 50, height = 20, units = c('cm'))
+```
+
+```{r}
+library(scCustomize)
+run1.combined.v10 <- subset(x = run1.combined.v10, idents = c("Stem F"))
+
+percent <- scCustomize::Percent_Expressing(seurat_object = run1.combined.v10, features = c("Smp-050220"))
+```
+
+Plot the 5 neurogenins from WBPS
+```{r}
+DefaultAssay(run1.combined.v10) <- "RNA"
+plot1 <- FeaturePlot(run1.combined.v10, features = "Smp-125400")
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75, max.overlaps = Inf)
+ggsave("figs_may24/run1.combined.v10-umap-Smp-125400-.pdf", width = 25, height = 15, units = c('cm'))
+
+plot1 <- FeaturePlot(run1.combined.v10, features = "Smp-082290")
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75, max.overlaps = Inf)
+ggsave("figs_may24/run1.combined.v10-umap-Smp-082290-.pdf", width = 25, height = 15, units = c('cm'))
+
+plot1 <- FeaturePlot(run1.combined.v10, features = "Smp-067430")
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75, max.overlaps = Inf)
+ggsave("figs_may24/run1.combined.v10-umap-Smp-067430-.pdf", width = 25, height = 15, units = c('cm'))
+
+plot1 <- FeaturePlot(run1.combined.v10, features = "Smp-072470")
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75, max.overlaps = Inf)
+ggsave("figs_may24/run1.combined.v10-umap-Smp-072470-.pdf", width = 25, height = 15, units = c('cm'))
+
+plot1 <- FeaturePlot(run1.combined.v10, features = "Smp-000620")
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75, max.overlaps = Inf)
+ggsave("figs_may24/run1.combined.v10-umap-Smp-000620-.pdf", width = 25, height = 15, units = c('cm'))
+```
+
+What percentage of cells come from each method?
+```{r}
+table(run1.combined.v10$may.ident)
+
+run1.combined.v10 <- subset(x = run1.combined.v10, subset = type == "sorted")
+table(run1.combined.v10$may.ident)
+
+run1.combined.v10 <- subset(x = run1.combined.v10, subset = type == "unsorted")
+table(run1.combined.v10$may.ident)
+```
+
+Subcluster neuron 1
+
+```{r}
+run1.combined.v10 <- subset(x = run1.combined.v10, idents = c("Neuron 1"))
+
+DefaultAssay(run1.combined.v10) <- "RNA"
+
+run1.combined.v10 <- NormalizeData(run1.combined.v10)
+run1.combined.v10 <- FindVariableFeatures(run1.combined.v10, selection.method = "vst", nfeatures = 2000)
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(run1.combined.v10), 10)
+top10
+
+all.genes <- rownames(run1.combined.v10)
+run1.combined.v10 <- ScaleData(run1.combined.v10, features = all.genes)
+run1.combined.v10 <- RunPCA(run1.combined.v10, features = VariableFeatures(object = run1.combined.v10),npcs = 100) #shows top contributing features for the PCs
+VizDimLoadings(run1.combined.v10, dims = 1:2, reduction = "pca") #shows the weightings of top contributing features to pcs 1 and 2
+DimHeatmap(run1.combined.v10, dims = 1, cells = 500, balanced = TRUE) #plots heatmap of top 500 mist variable cells for PC1, with relative gene expression
+DimHeatmap(run1.combined.v10, dims = 1:15, cells = 500, balanced = TRUE) #this gives the heatmaps for PCs 1-15, so you can visually inspect the genes/PCs
+DefaultAssay(run1.combined.v10) <- "RNA"
+ElbowPlot(run1.combined.v10, ndims = 100)  #ranks PCs by percentage of variation. A clear dropoff is sometimes seen, though not really here.
+ggsave("figs_may24/run1.combined.v10_elbowplot100_RNA.pdf")
+
+run1.combined.v10 <- FindNeighbors(run1.combined.v10, dims = 1:25) #here construct k-nearst neighbours graoh based on euclidean distance in PCA space, then refine edge weights based on Jaccard similarity. this takes the number of PCs previously determined as importan (here 15 PCs_)
+run1.combined.v10 <- FindClusters(run1.combined.v10, resolution = 0.2) #this iteratively groups cells using Louvain algorithm (default). Resolution sets the granularity. 0.4-1.2 gives good results for ~3K cells, with larger number suiting larger datasets.
+run1.combined.v10 <- RunUMAP(run1.combined.v10, dims = 1:25) #runs umap to visualise the clusters. Need to set the number of PCs
+DimPlot(run1.combined.v10, reduction = "umap", label=T) #visulaises the UMAP
+ggsave("figs_may24/run1.combined.v10clust_25PC_0.2res_RNA26PC_only_neuron_1.pdf")
+
+run1.combined.v10 <- SCTransform(run1.combined.v10, verbose = TRUE)
+#DefaultAssay(run1.combined.v10) <- "SCT"
+run1.combined.v10 <- RunPCA(run1.combined.v10, features = VariableFeatures(object = run1.combined.v10), npcs=100) #shows top contributing features for the PCs
+VizDimLoadings(run1.combined.v10, dims = 1:2, reduction = "pca") #shows the weightings of top contributing features to pcs 1 and 2
+DimHeatmap(run1.combined.v10, dims = 1, cells = 500, balanced = TRUE) #plots heatmap of top 500 mist variable cells for PC1, with relative gene expression
+ElbowPlot(run1.combined.v10, ndims = 100)  #ranks PCs by percentage of variation. A clear dropoff is sometimes seen, though not really here.
+ggsave("figs_may24/run1.combined.v10_elbowplot100_SCT.pdf")
+
+run1.combined.v10 <- FindNeighbors(run1.combined.v10, dims = 1:19) #here construct k-nearst neighbours graoh based on euclidean distance in PCA space, then refine edge weights based on Jaccard similarity. this takes the number of PCs previously determined as importan (here 15 PCs_)
+run1.combined.v10 <- FindClusters(run1.combined.v10, resolution = 0.3) #this iteratively groups cells using Louvain algorithm (default). Resolution sets the granularity. 0.4-1.2 gives good results for ~3K cells, with larger number suiting larger datasets.
+run1.combined.v10 <- RunUMAP(run1.combined.v10, dims = 1:19) #runs umap to visualise the clusters. Need to set the number of PCs
+DimPlot(run1.combined.v10, reduction = "umap") #visulaises the UMAP
+ggsave("figs_may24/run1.combined.v10clust_19PC_0.3res_SCT.pdf", width = 25, height = 15, units = c('cm'))
+
+plot1 <- FeaturePlot(run1.combined.v10, features = "Smp-332250")
+LabelClusters(plot1, id = "ident", color = 'black', size =4, repel = T,  box.padding = 1.75, max.overlaps = Inf)
+ggsave("figs_may24/run1.combined.v10-neuron1-umap-Smp-332250-.pdf", width = 25, height = 15, units = c('cm'))
+```
+
+How many cells express the neurogenins?
+```{r}
+library(scCustomize)
+percent <- scCustomize::Percent_Expressing(seurat_object = run1.combined.v10, features = c("Smp-072470"))
+```
+
+Co-expression of nanos and fgfrA
+```{r}
+DefaultAssay(run1.combined.v10) <- "RNA"
+
+coexpression.plot <-FeaturePlot(run1.combined.v10, features = c("Smp-051920", "Smp-175590"), blend = TRUE)
+coexpression.plot
+ggsave(paste("figs_may24/run1.combined.v10-coexpressed-Smp-051920-Smp-175590.pdf"), width = 50, height = 20, units = c('cm'))
+```
+
+Co-expression of nanos and fgfrA
+```{r}
+DefaultAssay(run1.combined.v10) <- "RNA"
+
+coexpression.plot <-FeaturePlot(run1.combined.v10, features = c("Smp-051920", "Smp-024860"), blend = TRUE)
+coexpression.plot
+ggsave(paste("figs_may24/run1.combined.v10-coexpressed-Smp-051920-Smp-024860.pdf"), width = 50, height = 20, units = c('cm'))
+```
